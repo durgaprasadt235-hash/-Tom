@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>local.tom.wake</string>
+    <key>CFBundleName</key>
+    <string>Tom Wake</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Tom uses the microphone to listen for its wake word.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Tom uses on-device Apple speech recognition to detect its wake word.</string>
+</dict>
+</plist>

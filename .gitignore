@@ -1,0 +1,37 @@
+# Environment / secrets
+.env
+.env.*
+
+# Python virtual environments
+.venv/
+venv/
+.wakevenv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Build artifacts
+.build/
+dist/
+build/
+
+# Local models
+models/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Old development backups
+tom-fast-wake-working.py
+tom-working-backup.py
+wake-working-backup.swift
+wake_test.py
