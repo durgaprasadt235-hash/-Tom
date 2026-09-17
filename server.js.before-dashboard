@@ -1,0 +1,482 @@
+const express = require("express");
+
+const {
+  DROP_ROOT,
+  listProjectFiles,
+  readProjectFile
+} = require("./agent");
+
+const app = express();
+app.use(express.json());
+
+const OMNIROUTE_URL = "http://127.0.0.1:20128";
+const MODEL = "my-combo";
+
+// -------------------------
+// TOM MOBILE HOME
+// -------------------------
+
+app.get("/", (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1"
+        />
+        <title>Tom Mobile</title>
+
+        <style>
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            padding: 24px;
+            max-width: 700px;
+            margin: auto;
+          }
+
+          input, textarea {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 12px;
+            margin-bottom: 10px;
+            font-size: 16px;
+          }
+
+          textarea {
+            min-height: 100px;
+          }
+
+          button {
+            padding: 12px 18px;
+            font-size: 16px;
+          }
+
+          pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+          }
+        </style>
+      </head>
+
+      <body>
+
+        <h1>Tom Mobile</h1>
+
+        <p>
+          Connected to MacBook and DROP workspace.
+        </p>
+
+        <h3>General Chat</h3>
+
+        <input
+          id="message"
+          placeholder="Ask Tom..."
+        />
+
+        <button onclick="askTom()">
+          Send
+        </button>
+
+        <hr />
+
+        <h3>Analyze DROP File</h3>
+
+        <input
+          id="filePath"
+          value="web/package.json"
+          placeholder="Example: web/app/page.tsx"
+        />
+
+        <textarea
+          id="question"
+          placeholder="What do you want Tom to analyze?"
+        ></textarea>
+
+        <button onclick="analyzeFile()">
+          Analyze File
+        </button>
+
+        <h3>Response</h3>
+
+        <pre id="response"></pre>
+
+        <script>
+
+          async function askTom() {
+
+            const message =
+              document.getElementById("message").value;
+
+            const output =
+              document.getElementById("response");
+
+            output.textContent = "Thinking...";
+
+            try {
+
+              const response = await fetch("/chat", {
+
+                method: "POST",
+
+                headers: {
+                  "Content-Type": "application/json"
+                },
+
+                body: JSON.stringify({
+                  message
+                })
+
+              });
+
+              const data = await response.json();
+
+              output.textContent =
+                data.reply ||
+                data.error ||
+                JSON.stringify(data, null, 2);
+
+            } catch (error) {
+
+              output.textContent =
+                "Error: " + error.message;
+
+            }
+
+          }
+
+
+          async function analyzeFile() {
+
+            const filePath =
+              document.getElementById("filePath").value;
+
+            const question =
+              document.getElementById("question").value;
+
+            const output =
+              document.getElementById("response");
+
+            output.textContent =
+              "Reading DROP file and analyzing...";
+
+            try {
+
+              const response =
+                await fetch("/analyze-file", {
+
+                  method: "POST",
+
+                  headers: {
+                    "Content-Type": "application/json"
+                  },
+
+                  body: JSON.stringify({
+                    path: filePath,
+                    question
+                  })
+
+                });
+
+              const data = await response.json();
+
+              output.textContent =
+                data.reply ||
+                data.error ||
+                JSON.stringify(data, null, 2);
+
+            } catch (error) {
+
+              output.textContent =
+                "Error: " + error.message;
+
+            }
+
+          }
+
+        </script>
+
+      </body>
+    </html>
+  `);
+});
+
+
+// -------------------------
+// GENERAL OMNIROUTE CHAT
+// -------------------------
+
+app.post("/chat", async (req, res) => {
+
+  try {
+
+    const message = req.body.message;
+
+    if (!message) {
+
+      return res.status(400).json({
+        error: "Message is required"
+      });
+
+    }
+
+    const response = await fetch(
+      `${OMNIROUTE_URL}/v1/chat/completions`,
+      {
+
+        method: "POST",
+
+        headers: {
+          "Content-Type": "application/json"
+        },
+
+        body: JSON.stringify({
+
+          model: MODEL,
+
+          messages: [
+            {
+              role: "user",
+              content: message
+            }
+          ]
+
+        })
+
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+
+      return res
+        .status(response.status)
+        .json(data);
+
+    }
+
+    res.json({
+
+      reply:
+        data.choices?.[0]?.message?.content ||
+        "No response"
+
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      error: error.message
+    });
+
+  }
+
+});
+
+
+// -------------------------
+// DROP PROJECT INFORMATION
+// -------------------------
+
+app.get("/project", (req, res) => {
+
+  try {
+
+    res.json({
+
+      project: "DROP",
+
+      path: DROP_ROOT,
+
+      files: listProjectFiles()
+
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      error: error.message
+    });
+
+  }
+
+});
+
+
+// -------------------------
+// READ DROP PROJECT FILE
+// -------------------------
+
+app.get("/file", (req, res) => {
+
+  try {
+
+    const filePath = req.query.path;
+
+    if (!filePath) {
+
+      return res.status(400).json({
+        error: "File path is required"
+      });
+
+    }
+
+    const content =
+      readProjectFile(filePath);
+
+    res.json({
+
+      project: "DROP",
+
+      path: filePath,
+
+      content
+
+    });
+
+  } catch (error) {
+
+    res.status(400).json({
+      error: error.message
+    });
+
+  }
+
+});
+
+
+// -------------------------
+// AI ANALYZE DROP FILE
+// -------------------------
+
+app.post("/analyze-file", async (req, res) => {
+
+  try {
+
+    const filePath = req.body.path;
+    const question = req.body.question;
+
+    if (!filePath) {
+
+      return res.status(400).json({
+        error: "File path is required"
+      });
+
+    }
+
+    if (!question) {
+
+      return res.status(400).json({
+        error: "Question is required"
+      });
+
+    }
+
+    const content =
+      readProjectFile(filePath);
+
+    const prompt = `
+You are Tom, an AI software engineering assistant.
+
+You are working on the DROP application.
+
+Project root:
+${DROP_ROOT}
+
+File being inspected:
+${filePath}
+
+The following is the ACTUAL content of that file:
+
+----- FILE START -----
+
+${content}
+
+----- FILE END -----
+
+User request:
+
+${question}
+
+Analyze only what is supported by the provided source code.
+
+Do not claim that you modified files.
+Do not claim that you executed commands.
+If more project files are required, clearly identify which files should be inspected next.
+`;
+
+    const response = await fetch(
+      `${OMNIROUTE_URL}/v1/chat/completions`,
+      {
+
+        method: "POST",
+
+        headers: {
+          "Content-Type": "application/json"
+        },
+
+        body: JSON.stringify({
+
+          model: MODEL,
+
+          messages: [
+            {
+              role: "user",
+              content: prompt
+            }
+          ]
+
+        })
+
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+
+      return res
+        .status(response.status)
+        .json(data);
+
+    }
+
+    res.json({
+
+      project: "DROP",
+
+      file: filePath,
+
+      reply:
+        data.choices?.[0]?.message?.content ||
+        "No response"
+
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      error: error.message
+    });
+
+  }
+
+});
+
+
+// -------------------------
+// START TOM MOBILE
+// -------------------------
+
+app.listen(
+  3001,
+  "0.0.0.0",
+  () => {
+
+    console.log(
+      "Tom Mobile running on port 3001"
+    );
+
+  }
+);

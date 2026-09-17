@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tom | Project Workspace</title>
+
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+
+<body>
+
+  <!-- LEFT NAVIGATION -->
+  <aside class="sidebar">
+
+    <div class="brand">
+      <div class="brand-mark">T</div>
+      <div>
+        <div class="brand-name">Tom</div>
+        <div class="brand-subtitle">Project Workspace</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+
+      <button class="nav-item active" data-page="home">
+        <span>⌂</span>
+        <span>Home</span>
+      </button>
+
+      <button class="nav-item" data-page="work">
+        <span>✓</span>
+        <span>My Work</span>
+      </button>
+
+      <button class="nav-item" data-page="workspace">
+        <span>▣</span>
+        <span>Workspace</span>
+      </button>
+
+      <button class="nav-item" data-page="incidents">
+        <span>△</span>
+        <span>Incidents</span>
+      </button>
+
+      <button class="nav-item" data-page="knowledge">
+        <span>▤</span>
+        <span>Knowledge</span>
+      </button>
+
+      <button class="nav-item" data-page="team">
+        <span>◎</span>
+        <span>Team</span>
+      </button>
+
+      <button class="nav-item" data-page="activity">
+        <span>↗</span>
+        <span>Activity</span>
+      </button>
+
+    </nav>
+
+    <div class="sidebar-bottom">
+
+      <button class="nav-item" data-page="help">
+        <span>?</span>
+        <span>Help & Support</span>
+      </button>
+
+      <button class="nav-item" data-page="settings">
+        <span>⚙</span>
+        <span>Settings</span>
+      </button>
+
+      <div class="workspace-connection">
+        <span class="status-dot"></span>
+
+        <div>
+          <strong>Project Workspace</strong>
+          <small>Connected</small>
+        </div>
+      </div>
+
+    </div>
+
+  </aside>
+
+
+  <!-- MAIN APPLICATION -->
+  <main class="app">
+
+    <!-- TOP BAR -->
+    <header class="topbar">
+
+      <div class="project-selector">
+        <strong>Project Alpha</strong>
+        <span>Data Migration & Integration</span>
+      </div>
+
+      <div class="project-status">
+        <span class="status-dot"></span>
+        Active
+      </div>
+
+      <div class="search">
+        <input
+          type="text"
+          placeholder="Search tasks, docs, tools..."
+        />
+      </div>
+
+      <div class="profile">
+        <div class="avatar">DP</div>
+
+        <div>
+          <strong>Durga Prasad</strong>
+          <span>Data Engineer</span>
+        </div>
+      </div>
+
+    </header>
+
+
+    <!-- HOME -->
+    <section id="home" class="page active">
+
+      <div class="page-heading">
+
+        <div>
+          <h1>Good morning, Durga</h1>
+          <p>Here's your project overview for today.</p>
+        </div>
+
+        <div class="shift-status">
+          <strong>On Shift</strong>
+          <span id="currentTime">--:--</span>
+        </div>
+
+      </div>
+
+
+      <!-- WORKSPACE HEALTH -->
+      <section class="card health-card">
+
+        <div class="card-header">
+
+          <div>
+            <h2>Workspace Health</h2>
+            <p id="healthSummary">
+              Checking your project environment...
+            </p>
+          </div>
+
+          <button id="healthCheckButton" class="primary-button">
+            Run Health Check
+          </button>
+
+        </div>
+
+
+        <div class="connection-grid">
+
+          <button class="connection" data-connection="Development Environment">
+            <span>Development Environment</span>
+            <strong class="connection-status">Checking</strong>
+          </button>
+
+          <button class="connection" data-connection="Source Database">
+            <span>Source Database</span>
+            <strong class="connection-status">Checking</strong>
+          </button>
+
+          <button class="connection" data-connection="Message Queue">
+            <span>Message Queue</span>
+            <strong class="connection-status">Checking</strong>
+          </button>
+
+          <button class="connection" data-connection="Scheduler">
+            <span>Scheduler</span>
+            <strong class="connection-status">Checking</strong>
+          </button>
+
+          <button class="connection" data-connection="File Server">
+            <span>File Server</span>
+            <strong class="connection-status">Checking</strong>
+          </button>
+
+          <button class="connection" data-connection="APIs">
+            <span>APIs</span>
+            <strong class="connection-status">Checking</strong>
+          </button>
+
+        </div>
+
+      </section>
+
+
+      <div class="dashboard-grid">
+
+        <!-- TODAY TASKS -->
+        <section class="card tasks-card">
+
+          <div class="card-header">
+            <h2>Today's Tasks</h2>
+            <button class="text-button">View All</button>
+          </div>
+
+          <div class="tabs">
+            <button class="tab active">My Tasks <span>5</span></button>
+            <button class="tab">In Progress <span>2</span></button>
+            <button class="tab">Blocked <span>0</span></button>
+            <button class="tab">Completed <span>1</span></button>
+          </div>
+
+          <div class="task-list">
+
+            <div class="task-row">
+              <span>T-101</span>
+              <strong>Validate incoming file schema</strong>
+              <span class="priority high">High</span>
+              <span>Today</span>
+              <span class="task-status progress">In Progress</span>
+            </div>
+
+            <div class="task-row">
+              <span>T-102</span>
+              <strong>Monitor data processing job</strong>
+              <span class="priority high">High</span>
+              <span>Today</span>
+              <span class="task-status">Pending</span>
+            </div>
+
+            <div class="task-row">
+              <span>T-103</span>
+              <strong>Run data quality checks</strong>
+              <span class="priority medium">Medium</span>
+              <span>Today</span>
+              <span class="task-status">Not Started</span>
+            </div>
+
+            <div class="task-row">
+              <span>T-104</span>
+              <strong>Reconcile target counts</strong>
+              <span class="priority medium">Medium</span>
+              <span>Tomorrow</span>
+              <span class="task-status">Not Started</span>
+            </div>
+
+            <div class="task-row">
+              <span>T-105</span>
+              <strong>Update project runbook</strong>
+              <span class="priority low">Low</span>
+              <span>Tomorrow</span>
+              <span class="task-status">Not Started</span>
+            </div>
+
+          </div>
+
+        </section>
+
+
+        <!-- PIPELINES -->
+        <section class="card pipeline-card">
+
+          <div class="card-header">
+            <h2>Pipeline Status</h2>
+            <button class="text-button">View All</button>
+          </div>
+
+          <div class="pipeline-row">
+            <div>
+              <strong>Ingestion Pipeline</strong>
+              <span>Last run: 08:00 AM</span>
+            </div>
+            <span class="success">Success</span>
+          </div>
+
+          <div class="pipeline-row">
+            <div>
+              <strong>Transformation</strong>
+              <span>Last run: 08:20 AM</span>
+            </div>
+            <span class="success">Success</span>
+          </div>
+
+          <div class="pipeline-row">
+            <div>
+              <strong>Data Load</strong>
+              <span>Last run: 08:45 AM</span>
+            </div>
+            <span class="running">Running</span>
+          </div>
+
+          <div class="pipeline-row">
+            <div>
+              <strong>Reconciliation</strong>
+              <span>Last run: 07:00 AM</span>
+            </div>
+            <span class="success">Success</span>
+          </div>
+
+        </section>
+
+
+        <!-- ACTIVITY -->
+        <section class="card">
+
+          <div class="card-header">
+            <h2>Recent Activity</h2>
+            <button class="text-button">View All</button>
+          </div>
+
+          <div class="activity-list">
+            <p>Data load job completed successfully <span>8:45 AM</span></p>
+            <p>Connected to message queue <span>8:12 AM</span></p>
+            <p>Validated incoming sample file <span>7:58 AM</span></p>
+            <p>Tom updated project knowledge <span>7:30 AM</span></p>
+          </div>
+
+        </section>
+
+
+        <!-- KNOWLEDGE -->
+        <section class="card">
+
+          <div class="card-header">
+            <h2>Project Knowledge</h2>
+            <button class="text-button">View All</button>
+          </div>
+
+          <div class="knowledge-list">
+            <button>Migration Process Guide</button>
+            <button>File Format Specifications</button>
+            <button>Error Handling Guide</button>
+            <button>Data Quality Rules</button>
+          </div>
+
+        </section>
+
+      </div>
+
+    </section>
+
+
+    <!-- PLACEHOLDER NAVIGATION PAGES -->
+    <section id="work" class="page">
+      <h1>My Work</h1>
+      <p>Your assigned project work will appear here.</p>
+    </section>
+
+    <section id="workspace" class="page">
+      <h1>Workspace</h1>
+      <p>Connections, applications, environments and health.</p>
+    </section>
+
+    <section id="incidents" class="page">
+      <h1>Incidents</h1>
+      <p>Project incidents, ownership, evidence and resolution.</p>
+    </section>
+
+    <section id="knowledge" class="page">
+      <h1>Knowledge</h1>
+      <p>Authorized project documentation and knowledge.</p>
+    </section>
+
+    <section id="team" class="page">
+      <h1>Team</h1>
+      <p>Project members, roles, responsibilities and ownership.</p>
+    </section>
+
+    <section id="activity" class="page">
+      <h1>Activity</h1>
+      <p>Verified project execution and evidence history.</p>
+    </section>
+
+
+  </main>
+
+
+  <!-- TOM ASSISTANT -->
+  <aside class="tom-panel" id="tomPanel">
+
+    <div class="tom-header">
+      <span class="tom-symbol" aria-hidden="true">T</span>
+      <strong class="tom-title">Tom</strong>
+      <button class="tom-text-button" id="tomNewChat" type="button">New chat</button>
+      <button class="tom-icon-button" id="tomHistoryToggle" type="button" aria-label="Toggle conversation history" aria-expanded="false" title="Conversation history">◷</button>
+      <button class="tom-icon-button" id="tomCollapse" type="button" aria-label="Collapse Tom" title="Collapse">›</button>
+    </div>
+
+    <div class="tom-panel-body">
+
+      <section class="tom-history" id="tomHistory" aria-label="Conversation history" aria-hidden="true">
+        <div class="tom-history-header">
+          <div>
+            <strong>Conversations</strong>
+            <span>Recent chats on this device</span>
+          </div>
+          <button class="tom-icon-button" id="tomHistoryClose" type="button" aria-label="Close conversation history" title="Close">×</button>
+        </div>
+        <div class="tom-history-list" id="tomHistoryList"></div>
+      </section>
+
+      <section class="tom-chat-shell" aria-label="Tom chat">
+        <div class="tom-quick-actions" id="tomActions" aria-label="Quick actions">
+          <button type="button">Show my tasks for today</button>
+          <button type="button">Check workspace health</button>
+          <button type="button">Check pipeline status</button>
+          <button type="button">Find project documentation</button>
+          <button type="button">Explain an error</button>
+        </div>
+
+        <div class="tom-messages" id="tomMessages" aria-live="polite"></div>
+
+        <div class="tom-composer-status" id="tomResponse">Tom is ready.</div>
+
+        <form class="tom-composer" id="tomComposer">
+          <div class="composer-box">
+            <textarea
+              id="tomInput"
+              rows="1"
+              placeholder="Ask Tom about your project..."
+              aria-label="Message Tom"
+            ></textarea>
+            <button id="tomSendButton" type="submit" disabled>Send</button>
+          </div>
+          <span class="composer-hint">Enter to send · Shift+Enter for a new line</span>
+        </form>
+      </section>
+
+    </div>
+
+  </aside>
+
+  <button class="tom-open-toggle" id="tomOpenToggle" type="button" aria-label="Open Tom" title="Open Tom">T</button>
+
+
+  <script src="/app.js"></script>
+
+</body>
+</html>

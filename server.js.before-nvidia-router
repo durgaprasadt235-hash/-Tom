@@ -1,0 +1,586 @@
+const express = require("express");
+
+const {
+  DROP_ROOT,
+  listProjectFiles,
+  readProjectFile,
+  getProjectTree,
+  executeControlledCommand,
+  writeProjectFile,
+  getAuditEvents,
+  getMetrics,
+  incrementActiveRequests,
+  decrementActiveRequests
+} = require("./agent");
+
+const app = express();
+
+app.use(express.json());
+
+// Middleware to track active requests
+app.use((req, res, next) => {
+  incrementActiveRequests();
+  res.on("finish", () => {
+    decrementActiveRequests();
+  });
+  next();
+});
+
+const OMNIROUTE_URL = "http://127.0.0.1:20128";
+
+// --------------------------------------------------
+// TOM MOBILE HOME
+// --------------------------------------------------
+
+app.get("/", (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1"
+        />
+        <title>Tom Mobile</title>
+      </head>
+
+      <body>
+        <h1>Tom Mobile</h1>
+
+        <p>Mac connection is working.</p>
+
+        <input
+          id="message"
+          placeholder="Ask Tom..."
+        />
+
+        <button onclick="askTom()">
+          Send
+        </button>
+
+        <pre id="response"></pre>
+
+        <script>
+          async function askTom() {
+            const message =
+              document.getElementById("message").value;
+
+            const output =
+              document.getElementById("response");
+
+            output.textContent = "Thinking...";
+
+            try {
+              const response = await fetch("/chat", {
+                method: "POST",
+
+                headers: {
+                  "Content-Type": "application/json"
+                },
+
+                body: JSON.stringify({
+                  message
+                })
+              });
+
+              const data =
+                await response.json();
+
+              output.textContent =
+                data.reply ||
+                data.error ||
+                JSON.stringify(
+                  data,
+                  null,
+                  2
+                );
+
+            } catch (error) {
+              output.textContent =
+                "Error: " + error.message;
+            }
+          }
+        </script>
+      </body>
+    </html>
+  `);
+});
+
+// --------------------------------------------------
+// TOM CHAT
+// --------------------------------------------------
+
+app.post("/chat", async (req, res) => {
+  try {
+    const message = req.body.message;
+
+    if (
+      !message ||
+      typeof message !== "string"
+    ) {
+      return res.status(400).json({
+        error: "Message is required"
+      });
+    }
+
+    // ----------------------------------------------
+    // REAL PROJECT EVIDENCE
+    // ----------------------------------------------
+
+    let projectFiles = [];
+
+    try {
+      projectFiles =
+        listProjectFiles();
+    } catch (error) {
+      console.error(
+        "Project inspection failed:",
+        error.message
+      );
+    }
+
+    const projectEvidence =
+      JSON.stringify(
+        projectFiles,
+        null,
+        2
+      );
+
+    // ----------------------------------------------
+    // SEND TOM CONTEXT + REAL EVIDENCE TO MODEL
+    // ----------------------------------------------
+
+    const response = await fetch(
+      `${OMNIROUTE_URL}/v1/chat/completions`,
+      {
+        method: "POST",
+
+        headers: {
+          "Content-Type":
+            "application/json"
+        },
+
+        body: JSON.stringify({
+          model: "my-combo",
+
+          messages: [
+            {
+              role: "system",
+
+              content: `
+You are Tom, an AI engineering agent running locally on Durga's Mac.
+
+IDENTITY
+--------
+Your name is Tom.
+
+Never identify yourself as Ling, Claude, GPT, Gemini, or any underlying language model.
+
+Underlying language models are reasoning engines used by Tom. They are not Tom's identity.
+
+
+CURRENT ENVIRONMENT
+-------------------
+Tom Mobile is running locally.
+
+Current authorized project:
+
+Name:
+DROP
+
+Root:
+${DROP_ROOT}
+
+
+SECURITY BOUNDARY
+-----------------
+Tom is authorized to inspect the DROP project.
+
+Sensitive files and directories are filtered by Tom's local security layer.
+
+Environment files, credentials, private keys, .git internals, .vercel internals, node_modules, and paths outside DROP are not authorized for model inspection.
+
+
+CURRENT VERIFIED PROJECT EVIDENCE
+---------------------------------
+
+The following file listing was generated directly from the local DROP filesystem for this request.
+
+This is VERIFIED TOOL OUTPUT.
+
+${projectEvidence}
+
+
+CAPABILITIES CURRENTLY CONNECTED
+--------------------------------
+
+CONNECTED:
+
+1. List the authorized DROP top-level project files.
+2. Read an explicitly requested authorized DROP project file through Tom's local file endpoint.
+3. Analyze source code when its contents have actually been supplied.
+
+NOT YET CONNECTED:
+
+1. Recursive autonomous repository exploration.
+2. Terminal command execution.
+3. File modification.
+4. Git operations.
+5. Build execution.
+6. Test execution.
+7. Vercel deployment.
+8. Browser verification.
+
+
+TRUTHFULNESS RULES
+------------------
+
+Never claim Tom inspected file contents unless those contents were actually provided by a Tom tool.
+
+Never claim Tom executed a command unless command output was actually returned by Tom's execution layer.
+
+Never claim a file was changed unless Tom's write layer confirmed the change.
+
+Never claim a build, test, Git operation, deployment, or browser verification succeeded unless corresponding tool output confirms it.
+
+Distinguish clearly between:
+
+VERIFIED:
+Information contained in actual Tom tool output.
+
+INFERENCE:
+A conclusion derived from verified information.
+
+PROPOSED:
+An action Tom recommends but has not executed.
+
+
+OPERATING STYLE
+---------------
+
+Act as an engineering agent rather than a generic chatbot.
+
+Be concise, technical, and execution-oriented.
+
+When project evidence is available, reason from that evidence rather than guessing.
+
+If a requested action requires a capability that is not yet connected, say exactly which capability is missing rather than pretending the action occurred.
+`
+            },
+
+            {
+              role: "user",
+              content: message
+            }
+          ]
+        })
+      }
+    );
+
+    const data =
+      await response.json();
+
+    if (!response.ok) {
+      console.error(
+        "OmniRoute error:",
+        data
+      );
+
+      return res
+        .status(response.status)
+        .json(data);
+    }
+
+    const reply =
+      data.choices?.[0]
+        ?.message?.content ||
+      "No response";
+
+    res.json({
+      reply,
+      project: "DROP",
+      evidenceFiles:
+        projectFiles.length
+    });
+
+  } catch (error) {
+    console.error(
+      "Tom chat error:",
+      error
+    );
+
+    res.status(500).json({
+      error: error.message
+    });
+  }
+});
+
+// --------------------------------------------------
+// DROP PROJECT INFORMATION
+// --------------------------------------------------
+
+app.get("/project", (req, res) => {
+  try {
+    const files =
+      listProjectFiles();
+
+    res.json({
+      project: "DROP",
+      path: DROP_ROOT,
+      files
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      error: error.message
+    });
+  }
+});
+
+// --------------------------------------------------
+// READ AUTHORIZED DROP FILE
+// --------------------------------------------------
+
+app.get("/file", (req, res) => {
+  try {
+    const filePath =
+      req.query.path;
+
+    if (!filePath) {
+      return res
+        .status(400)
+        .json({
+          error:
+            "File path is required"
+        });
+    }
+
+    const content =
+      readProjectFile(filePath);
+
+    res.json({
+      project: "DROP",
+      path: filePath,
+      content
+    });
+
+  } catch (error) {
+    res.status(400).json({
+      error: error.message
+    });
+  }
+});
+
+// --------------------------------------------------
+// HEALTH CHECK
+// --------------------------------------------------
+
+app.get("/health", (req, res) => {
+  try {
+    // Test DROP project accessibility by trying to read the project root
+    let dropAccessible = false;
+    let dropError = null;
+    try {
+      const files = listProjectFiles();
+      dropAccessible = files.length >= 0; // Even empty array means accessible
+    } catch (error) {
+      dropError = error.message;
+    }
+    
+    // Test OmniRoute connectivity (simple DNS/resolution check, not actual call)
+    let omniRouteStatus = "unknown";
+    try {
+      // We won't actually call OmniRoute here to avoid dependencies in health check
+      // Just check if the URL is configured
+      if (OMNIROUTE_URL && typeof OMNIROUTE_URL === "string") {
+        omniRouteStatus = "configured";
+      } else {
+        omniRouteStatus = "misconfigured";
+      }
+    } catch (error) {
+      omniRouteStatus = "error";
+    }
+    
+    const metricsData = getMetrics();
+    
+    res.json({
+      status: "ok",
+      agent: "Tom",
+      project: "DROP",
+      dropProject: {
+        accessible: dropAccessible,
+        error: dropError,
+        path: DROP_ROOT
+      },
+      omniRoute: {
+        status: omniRouteStatus,
+        url: OMNIROUTE_URL
+      },
+      uptime: metricsData.uptime,
+      activeRequests: metricsData.activeRequests
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: "error",
+      agent: "Tom",
+      project: "DROP",
+      error: error.message
+    });
+  }
+});
+
+// --------------------------------------------------
+// METRICS ENDPOINT
+// --------------------------------------------------
+
+app.get("/metrics", (req, res) => {
+  try {
+    const metricsData = getMetrics();
+    res.json({
+      project: "DROP",
+      metrics: metricsData
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error.message
+    });
+  }
+});
+
+// --------------------------------------------------
+// LOGS ENDPOINT
+// --------------------------------------------------
+
+app.get("/logs", (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 100;
+    const logs = getAuditEvents(limit);
+    res.json({
+      project: "DROP",
+      logs: logs,
+      count: logs.length
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error.message
+    });
+  }
+});
+
+// --------------------------------------------------
+// CONTROLLED EXECUTION ENDPOINT
+// --------------------------------------------------
+
+app.post("/execute", async (req, res) => {
+  try {
+    const { command } = req.body;
+
+    if (!command || typeof command !== "string") {
+      return res.status(400).json({
+        error: "Command is required"
+      });
+    }
+
+    const result = await executeControlledCommand(command);
+    
+    res.json({
+      project: "DROP",
+      ...result
+    });
+  } catch (error) {
+    // Check if it's a validation error (400) or execution error (500)
+    if (error.message.includes("not allowed") || 
+        error.message.includes("required") || 
+        error.message.includes("operator") ||
+        error.message.includes("empty")) {
+      return res.status(400).json({
+        error: error.message
+      });
+    }
+    
+    res.status(500).json({
+      error: error.message
+    });
+  }
+});
+
+// --------------------------------------------------
+// CONTROLLED FILE WRITE ENDPOINT
+// --------------------------------------------------
+
+app.post("/file/write", async (req, res) => {
+  try {
+    const { path, content } = req.body;
+
+    if (!path || typeof path !== "string") {
+      return res.status(400).json({
+        error: "File path is required"
+      });
+    }
+
+    if (content === undefined) {
+      return res.status(400).json({
+        error: "Content is required"
+      });
+    }
+
+    const result = await writeProjectFile(path, content);
+    
+    res.json({
+      project: "DROP",
+      ...result
+    });
+  } catch (error) {
+    // Check if it's a validation error (400) or write error (500)
+    if (error.message.includes("not allowed") || 
+        error.message.includes("required") || 
+        error.message.includes("outside") ||
+        error.message.includes("directory") ||
+        error.message.includes("symlink") ||
+        error.message.includes("size")) {
+      return res.status(400).json({
+        error: error.message
+      });
+    }
+    
+    res.status(500).json({
+      error: error.message
+    });
+  }
+});
+
+// --------------------------------------------------
+// PROJECT TREE ENDPOINT
+// --------------------------------------------------
+
+app.get('/project/tree', (req, res) => {
+  try {
+    const treeResult = getProjectTree(DROP_ROOT);
+    res.json({
+      project: 'DROP',
+      root: DROP_ROOT,
+      tree: treeResult.tree,
+      truncated: treeResult.truncated
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --------------------------------------------------
+// START TOM MOBILE
+// --------------------------------------------------
+
+app.listen(
+  3001,
+  "0.0.0.0",
+  () => {
+    console.log(
+      "Tom Mobile running on port 3001"
+    );
+
+    console.log(
+      `Authorized project: ${DROP_ROOT}`
+    );
+  }
+);
