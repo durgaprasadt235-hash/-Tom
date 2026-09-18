@@ -8,7 +8,8 @@ const { askNvidia } = require("./nvidia-router");
 const {
   DROP_ROOT,
   listProjectFiles,
-  readProjectFile
+  readProjectFile,
+  getProjectFileInfo
 } = require("./agent");
 
 const app = express();
@@ -260,6 +261,62 @@ app.post(
         return res.status(400).json({
           error:
             "Question is required"
+        });
+      }
+
+
+      /*
+        SAFE OVERSIZED-FILE DETECTION
+
+        Never send an entire large file to the model.
+
+        Instead, return a clear "large file" result so the
+        client can show:
+          "Large file — targeted analysis required"
+
+        This keeps the architecture ready for later
+        chunking / indexing / retrieval without changing
+        the provider routing or reading the whole file.
+      */
+      const fileInfo =
+        getProjectFileInfo(filePath);
+
+      if (fileInfo.isLarge) {
+        return res.status(200).json({
+          project:
+            "Project Workspace",
+
+          file:
+            filePath,
+
+          largeFile:
+            true,
+
+          size:
+            fileInfo.size,
+
+          maxSize:
+            fileInfo.maxSize,
+
+          message:
+            "Large file — targeted analysis required",
+
+          reply:
+            "Large file — targeted analysis required.\n\n" +
+            "This file is " +
+            Math.round(fileInfo.size / 1024) +
+            " KB, which is above Tom's " +
+            Math.round(fileInfo.maxSize / 1024) +
+            " KB full-analysis limit. Tom will not send " +
+            "the entire file to the model.\n\n" +
+            "Targeted analysis (chunking / retrieval) is " +
+            "required for this file.",
+
+          provider:
+            "nvidia-direct",
+
+          model:
+            null
         });
       }
 

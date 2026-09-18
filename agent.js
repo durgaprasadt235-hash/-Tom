@@ -253,6 +253,42 @@ function readProjectFile(relativePath) {
 }
 
 // --------------------------------------------------
+// PROJECT FILE METADATA (read-only, no content)
+// --------------------------------------------------
+// Used for safe oversized-file detection so large
+// files are never sent to the AI in full. This only
+// reads filesystem metadata; it does not broaden any
+// filesystem permissions or bypass path validation.
+
+const MAX_ANALYZABLE_FILE_SIZE = 1024 * 1024; // 1 MB
+
+function getProjectFileInfo(relativePath) {
+  const resolvedFile =
+    validateProjectPath(relativePath);
+
+  if (!fs.existsSync(resolvedFile)) {
+    throw new Error(
+      "Requested file does not exist"
+    );
+  }
+
+  const stats = fs.statSync(resolvedFile);
+
+  if (!stats.isFile()) {
+    throw new Error(
+      "Requested path is not a file"
+    );
+  }
+
+  return {
+    path: relativePath,
+    size: stats.size,
+    maxSize: MAX_ANALYZABLE_FILE_SIZE,
+    isLarge: stats.size > MAX_ANALYZABLE_FILE_SIZE
+  };
+}
+
+// --------------------------------------------------
 // CONTROLLED TERMINAL EXECUTION
 // --------------------------------------------------
 
@@ -684,6 +720,7 @@ module.exports = {
   DROP_ROOT,
   listProjectFiles,
   readProjectFile,
+  getProjectFileInfo,
   getProjectTree,
   executeControlledCommand,
   writeProjectFile,

@@ -11,7 +11,8 @@
 <body>
 
   <!-- LEFT NAVIGATION -->
-  <aside class="sidebar">
+  <aside class="sidebar" id="sidebar" aria-label="Main navigation">
+    <button class="panel-control sidebar-close" id="sidebarClose" type="button" aria-label="Close navigation">×</button>
 
     <div class="brand">
       <div class="brand-mark">T</div>
@@ -91,6 +92,7 @@
 
     <!-- TOP BAR -->
     <header class="topbar">
+      <button class="panel-control" id="sidebarToggle" type="button" aria-controls="sidebar" aria-expanded="true" aria-label="Collapse navigation" title="Toggle navigation">☰</button>
 
       <div class="project-selector">
         <strong>Project Alpha</strong>
@@ -106,6 +108,7 @@
         <input
           type="text"
           placeholder="Search tasks, docs, tools..."
+          aria-label="Search tasks, docs, tools"
         />
       </div>
 
@@ -563,12 +566,19 @@
   </main>
 
 
+  <button class="panel-backdrop" id="panelBackdrop" type="button" aria-label="Close open panel" hidden></button>
+
+  <div class="tom-divider" id="tomDivider" role="separator" aria-orientation="vertical" aria-label="Resize Tom panel" tabindex="0"></div>
+
   <!-- TOM ASSISTANT -->
   <aside class="tom-panel" id="tomPanel">
 
     <div class="tom-header">
       <span class="tom-symbol" aria-hidden="true">T</span>
-      <strong class="tom-title">Tom</strong>
+      <div class="tom-heading">
+        <strong class="tom-title">Tom</strong>
+        <span class="tom-context" id="tomContext">Project: Drop</span>
+      </div>
       <button class="tom-text-button" id="tomNewChat" type="button">New chat</button>
       <button class="tom-icon-button" id="tomHistoryToggle" type="button" aria-label="Toggle conversation history" aria-expanded="false" title="Conversation history">◷</button>
       <button class="tom-icon-button" id="tomCollapse" type="button" aria-label="Collapse Tom" title="Collapse">›</button>
@@ -588,12 +598,41 @@
       </section>
 
       <section class="tom-chat-shell" aria-label="Tom chat">
-        <div class="tom-quick-actions" id="tomActions" aria-label="Quick actions">
-          <button type="button">Show my tasks for today</button>
-          <button type="button">Check workspace health</button>
-          <button type="button">Check pipeline status</button>
-          <button type="button">Find project documentation</button>
-          <button type="button">Explain an error</button>
+        <div class="tom-quick-actions" id="tomActions">
+          <button class="quick-actions-toggle" id="quickActionsToggle" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="quickActionsMenu">Quick Actions <span class="quick-actions-caret" aria-hidden="true">▾</span></button>
+          <div class="quick-actions-menu" id="quickActionsMenu" role="menu" aria-label="Quick actions" hidden>
+            <div class="quick-actions-group">
+              <div class="quick-actions-group-title">Project</div>
+              <button type="button" role="menuitem" data-action="chat" data-prompt="Show my tasks for today.">Show my tasks for today</button>
+              <button type="button" role="menuitem" data-action="chat" data-prompt="Check workspace health and summarize the current status.">Check workspace health</button>
+              <button type="button" role="menuitem" data-action="chat" data-prompt="Check the pipeline status and summarize the current state.">Check pipeline status</button>
+              <button type="button" role="menuitem" data-action="chat" data-prompt="Find the relevant project documentation for this workspace.">Find project documentation</button>
+              <button type="button" role="menuitem" data-action="chat" data-prompt="Explain the project architecture based on the available project files.">Explain project architecture</button>
+              <button type="button" role="menuitem" data-action="chat" data-prompt="Search the project and summarize the relevant files you find.">Search project</button>
+            </div>
+            <div class="quick-actions-group">
+              <div class="quick-actions-group-title">Code</div>
+              <button type="button" role="menuitem" data-action="file" data-question="Analyze this file and explain what it does, its key responsibilities, and anything important to know.">Analyze current file</button>
+              <button type="button" role="menuitem" data-action="file" data-question="Summarize this file concisely.">Summarize current file</button>
+              <button type="button" role="menuitem" data-action="file" data-question="Explain the selected code in this file.">Explain selected code</button>
+              <button type="button" role="menuitem" data-action="file" data-question="Find files in the project related to this file and explain how they relate.">Find related files</button>
+              <button type="button" role="menuitem" data-action="file" data-question="Trace the main function or functions in this file and describe the execution flow.">Trace this function</button>
+              <button type="button" role="menuitem" data-action="file" data-question="List the dependencies used by this file and what each is used for.">Find dependencies</button>
+              <button type="button" role="menuitem" data-action="file" data-question="Find the API endpoints defined or used in this file.">Find API endpoints</button>
+              <button type="button" role="menuitem" data-action="file" data-question="Review this code for correctness, risks, and improvements.">Review code</button>
+            </div>
+            <div class="quick-actions-group">
+              <div class="quick-actions-group-title">Debug</div>
+              <button type="button" role="menuitem" data-action="chat" data-prompt="Help me explain an error I am seeing and how to investigate it.">Explain an error</button>
+              <button type="button" role="menuitem" data-action="file" data-question="Find potential bugs or edge cases in this file.">Find potential bugs</button>
+              <button type="button" role="menuitem" data-action="chat" data-prompt="Help me trace an issue in this project. What details do you need from me?">Trace an issue</button>
+            </div>
+            <div class="quick-actions-group">
+              <div class="quick-actions-group-title">Operations</div>
+              <button type="button" role="menuitem" data-action="chat" data-prompt="Check the recent changes in this project and summarize them.">Check recent changes</button>
+              <button type="button" role="menuitem" data-action="chat" data-prompt="Suggest the next steps for this project.">Suggest next steps</button>
+            </div>
+          </div>
         </div>
 
         <div class="tom-messages" id="tomMessages" aria-live="polite"></div>
@@ -601,6 +640,7 @@
         <div class="tom-composer-status" id="tomResponse">Tom is ready.</div>
 
         <form class="tom-composer" id="tomComposer">
+          <div class="tom-context-chips" id="tomContextChips" hidden></div>
           <div class="composer-box">
             <textarea
               id="tomInput"
@@ -618,7 +658,7 @@
 
   </aside>
 
-  <button class="tom-open-toggle" id="tomOpenToggle" type="button" aria-label="Open Tom" title="Open Tom">T</button>
+  <button class="tom-open-toggle" id="tomOpenToggle" type="button" aria-label="Open Tom" title="Open Tom" aria-controls="tomPanel" aria-expanded="false">Tom</button>
 
 
   <script src="/app.js"></script>

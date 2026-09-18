@@ -1019,32 +1019,84 @@ body.tom-collapsed .tom-panel {
    ========================================================= */
 
 .tom-quick-actions {
+  position: relative;
   flex: 0 0 auto;
-  padding: 10px 16px;
+  padding: 8px 12px;
   background: var(--soft);
   border-bottom: 1px solid var(--border);
 }
 
-.tom-quick-actions button {
+.quick-actions-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  background: white;
+  color: var(--text);
+  border-radius: 7px;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.quick-actions-toggle:hover {
+  background: #f9fafb;
+}
+
+.quick-actions-caret {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.quick-actions-menu {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: calc(100% - 4px);
+  z-index: 20;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  max-height: min(320px, 50vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+}
+
+.quick-actions-menu[hidden] {
+  display: none;
+}
+
+.quick-actions-group {
+  padding: 2px 0 4px;
+}
+
+.quick-actions-group-title {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 6px 8px 4px;
+}
+
+.quick-actions-menu button {
   display: block;
   width: 100%;
   text-align: left;
-  background: white;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  padding: 8px 10px;
-  cursor: pointer;
+  border: 0;
+  background: transparent;
   color: var(--text);
-  font-size: 11px;
-  margin-bottom: 5px;
+  border-radius: 6px;
+  padding: 7px 8px;
+  font-size: 12px;
+  cursor: pointer;
 }
 
-.tom-quick-actions button:last-child {
-  margin-bottom: 0;
-}
-
-.tom-quick-actions button:hover {
-  background: #f9fafb;
+.quick-actions-menu button:hover {
+  background: var(--soft);
 }
 
 /* =========================================================
@@ -1326,114 +1378,6 @@ body.tom-collapsed .tom-panel {
    RESPONSIVE
    ========================================================= */
 
-@media (max-width: 1100px) {
-  .app {
-    margin-right: 0;
-  }
-
-  .tom-panel {
-    width: min(360px, 92vw);
-    transform: translateX(100%);
-    visibility: hidden;
-    pointer-events: none;
-    box-shadow: -12px 0 30px rgba(0, 0, 0, 0.08);
-  }
-
-  .tom-panel.mobile-open,
-  body.tom-mobile-open .tom-panel {
-    transform: translateX(0);
-    visibility: visible;
-    pointer-events: auto;
-  }
-
-  .tom-open-toggle {
-    display: block;
-  }
-
-  body.tom-mobile-open .tom-open-toggle {
-    display: none;
-  }
-}
-
-@media (max-width: 760px) {
-  :root {
-    --sidebar-width: 68px;
-  }
-
-  .sidebar {
-    width: var(--sidebar-width);
-    padding-left: 10px;
-    padding-right: 10px;
-  }
-
-  .brand {
-    justify-content: center;
-    padding-left: 0;
-    padding-right: 0;
-  }
-
-  .brand > div:last-child,
-  .nav-item span:last-child,
-  .workspace-connection div {
-    display: none;
-  }
-
-  .nav-item {
-    justify-content: center;
-    padding-left: 8px;
-    padding-right: 8px;
-  }
-
-  .workspace-connection {
-    justify-content: center;
-  }
-
-  .app {
-    margin-left: var(--sidebar-width);
-    margin-right: 0;
-  }
-
-  .topbar {
-    padding: 0 16px;
-    gap: 12px;
-  }
-
-  .project-selector {
-    min-width: 0;
-  }
-
-  .profile div:last-child,
-  .project-status {
-    display: none;
-  }
-
-  .page {
-    padding: 20px 16px;
-  }
-
-  .page-heading {
-    gap: 12px;
-  }
-
-  .connection-grid,
-  .dashboard-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .task-row {
-    grid-template-columns: 45px minmax(0, 1fr) 70px;
-  }
-
-  .task-row > *:nth-child(4),
-  .task-row > *:nth-child(5) {
-    display: none;
-  }
-
-  .tom-panel {
-    width: calc(100vw - var(--sidebar-width));
-  }
-}
-
 /* =========================================================
    WORKSPACE PAGE
    ========================================================= */
@@ -1623,4 +1567,352 @@ body.tom-collapsed .tom-panel {
   .workspace-explorer {
     max-height: 40vh;
   }
+}
+
+/* Coordinated panel layout: desktop columns, mobile overlay drawers. */
+.app { min-width: 0; container-type: inline-size; transition: none; }
+.sidebar { overflow-y: auto; overscroll-behavior: contain; }
+body.sidebar-collapsed { --sidebar-width: 68px; }
+body.sidebar-collapsed .sidebar { padding-inline: 10px; }
+body.sidebar-collapsed .brand { justify-content: center; padding-inline: 0; }
+body.sidebar-collapsed .brand > div:last-child,
+body.sidebar-collapsed .nav-item span:last-child,
+body.sidebar-collapsed .workspace-connection div { display: none; }
+body.sidebar-collapsed .nav-item,
+body.sidebar-collapsed .workspace-connection { justify-content: center; padding-inline: 8px; }
+.panel-control, .tom-open-toggle { min-width: 44px; min-height: 44px; }
+.panel-control { border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text); cursor: pointer; flex-shrink: 0; font-size: 20px; }
+.sidebar-close, .panel-backdrop { display: none; }
+.topbar { height: auto; min-height: 72px; flex-wrap: wrap; gap: 12px; padding: 12px 20px; }
+.project-selector { min-width: 0; flex: 1 1 160px; }
+.search { min-width: 140px; flex: 1 1 180px; }
+.profile { flex-shrink: 0; }
+.page, .card, .card-header > div { min-width: 0; }
+.page-heading, .card-header { flex-wrap: wrap; gap: 12px; }
+.page p { overflow-wrap: anywhere; }
+.tom-panel { height: 100dvh; transition: none; }
+.tom-composer textarea { min-width: 0; }
+.tom-history { max-height: 25%; }
+.tom-message { flex-shrink: 0; }
+.tom-open-toggle { top: auto; bottom: 16px; right: 16px; box-shadow: 0 2px 10px #0002; }
+button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid #3266a8; outline-offset: 2px; }
+@container (max-width: 850px) {
+  .workspace-layout, .dashboard-grid { grid-template-columns: minmax(0, 1fr); }
+  .connection-grid, .connected-tools-grid, .knowledge-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .task-row { grid-template-columns: 45px minmax(0, 1fr) 70px; }
+  .task-row > :nth-child(4), .task-row > :nth-child(5) { display: none; }
+  .tabs { flex-wrap: wrap; }
+}
+@container (max-width: 480px) {
+  .connection-grid, .connected-tools-grid, .knowledge-grid { grid-template-columns: minmax(0, 1fr); }
+  .page { padding: 20px 16px 76px; }
+  .page-heading h1 { font-size: 23px; }
+  .search { order: 5; flex-basis: 100%; }
+  .search input { max-width: none; }
+  .project-status { display: none; }
+  .profile > div:last-child { display: none; }
+}
+@media (max-width: 900px) {
+  .app, body.tom-collapsed .app { margin: 0; }
+  .sidebar { width: min(280px, calc(100vw - 48px)); z-index: 30; visibility: hidden; transform: translateX(-100%); }
+  body.nav-mobile-open .sidebar { visibility: visible; transform: none; }
+  .sidebar-close { display: block; align-self: flex-end; margin-bottom: 12px; }
+  .tom-panel { width: min(420px, calc(100vw - 24px)); z-index: 30; visibility: hidden; transform: translateX(100%); pointer-events: none; }
+  body.tom-mobile-open .tom-panel { visibility: visible; transform: none; pointer-events: auto; }
+  .tom-open-toggle { display: block; }
+  body.drawer-open .tom-open-toggle { display: none; }
+  .panel-backdrop:not([hidden]) { display: block; position: fixed; inset: 0; width: 100%; height: 100%; background: #0006; border: 0; z-index: 20; cursor: pointer; }
+  body.drawer-open { overflow: hidden; }
+  .topbar { padding: 10px 12px; }
+  .nav-item, .tom-icon-button, .tom-text-button, .workspace-node, .text-button, .primary-button, .tab, .tom-quick-actions button { min-height: 44px; }
+  .tom-icon-button { min-width: 44px; }
+  .tom-header { padding: 8px; gap: 4px; }
+  .tom-composer { padding-bottom: env(safe-area-inset-bottom); }
+  .tom-composer textarea, .search input { font-size: 16px; }
+  .tom-composer button { min-height: 44px; }
+}
+
+/* =========================================================
+   TOM HEADER — compact title + active context
+   ========================================================= */
+
+.tom-heading {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  line-height: 1.2;
+}
+
+.tom-heading .tom-title {
+  flex: 0 0 auto;
+}
+
+.tom-context {
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+/* =========================================================
+   TOM RESIZE DIVIDER (desktop only)
+   ========================================================= */
+
+.tom-divider {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  z-index: 9;
+  width: 6px;
+  margin-right: -3px;
+  right: var(--tom-width);
+  cursor: col-resize;
+  background: transparent;
+  border: 0;
+}
+
+.tom-divider::after {
+  content: "";
+  position: absolute;
+  inset: 0 2px;
+  background: transparent;
+  transition: background 0.15s;
+}
+
+.tom-divider:hover::after,
+.tom-divider:focus-visible::after {
+  background: #c7ccd3;
+}
+
+body.tom-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+body.tom-resizing .tom-panel,
+body.tom-resizing .app {
+  transition: none;
+}
+
+body.tom-collapsed .tom-divider {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .tom-divider {
+    display: none;
+  }
+}
+
+/* =========================================================
+   ACTIVE FILE CONTEXT CHIP
+   ========================================================= */
+
+.tom-context-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 14px 0;
+}
+
+.tom-context-chips[hidden] {
+  display: none;
+}
+
+.context-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  background: #eef4fb;
+  border: 1px solid #cddff2;
+  color: #1f4e8c;
+  border-radius: 999px;
+  padding: 3px 4px 3px 10px;
+  font-size: 11px;
+}
+
+.context-chip-label {
+  max-width: 180px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.context-chip-remove {
+  border: 0;
+  background: transparent;
+  color: #1f4e8c;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 6px;
+  border-radius: 999px;
+}
+
+.context-chip-remove:hover {
+  background: #d7e6f7;
+}
+
+/* =========================================================
+   MESSAGE ROLES + CONTENT
+   ========================================================= */
+
+.tom-message .message-role {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.tom-message.user .message-role {
+  text-align: right;
+}
+
+.tom-message .message-time {
+  display: block;
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* System / tool activity is visually distinct and quiet. */
+.tom-message.system {
+  background: #faf7ee;
+  border: 1px dashed #e3d9bf;
+  color: #6a5b34;
+  max-width: 100%;
+  margin-inline: 0;
+}
+
+.tom-message.system .message-role {
+  color: #9a6a16;
+}
+
+.tom-message .message-content ul,
+.tom-message .message-content ol {
+  margin: 7px 0;
+  padding-left: 20px;
+}
+
+.tom-message .message-content p {
+  margin: 0 0 8px;
+}
+
+.tom-message .message-content p:last-child {
+  margin-bottom: 0;
+}
+
+/* =========================================================
+   CODE BLOCKS (monospace, preserve, horizontal scroll, Copy)
+   ========================================================= */
+
+.code-block {
+  margin: 8px 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #1a1a1a;
+}
+
+.code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: #111315;
+  border-bottom: 1px solid #2a2d33;
+}
+
+.code-lang {
+  font-size: 10px;
+  color: #9aa0a6;
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+}
+
+.code-copy {
+  border: 1px solid #3a3e44;
+  background: #22252a;
+  color: #e6e8eb;
+  border-radius: 5px;
+  padding: 3px 9px;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.code-copy:hover {
+  background: #2d3138;
+}
+
+.code-copy.copied {
+  color: #7ee0a8;
+  border-color: #2f6b48;
+}
+
+.code-block pre {
+  margin: 0;
+  padding: 12px;
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.code-block code {
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #f2f4f6;
+  white-space: pre;
+  min-width: max-content;
+  tab-size: 2;
+}
+
+/* =========================================================
+   CONVERSATION HISTORY META
+   ========================================================= */
+
+.tom-history-item .conversation-title {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tom-history-item .conversation-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.tom-history-item .conversation-preview,
+.tom-history-item .conversation-time {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tom-history-item .conversation-time {
+  flex: 0 0 auto;
+}
+
+/* Large-file notice badge inside Tom messages. */
+.tom-message .large-file-note {
+  display: inline-block;
+  font-size: 10px;
+  color: var(--warning);
+  background: #fef3e5;
+  border-radius: 4px;
+  padding: 2px 6px;
+  margin-bottom: 6px;
 }

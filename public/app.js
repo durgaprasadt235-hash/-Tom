@@ -18,6 +18,7 @@ navItems.forEach((item) => {
 
     item.classList.add("active");
     targetPage.classList.add("active");
+    if (mobileLayout.matches) closeMobileDrawers();
   });
 });
 
@@ -146,46 +147,159 @@ function createConversation(firstMessageText) {
   const title = firstMessageText.length > 40
     ? firstMessageText.substring(0, 40).trim() + "…"
     : firstMessageText.trim();
-  const conv = { id, title, messages: [], timestamp: new Date().toLocaleString() };
+  const conv = {
+    id,
+    title,
+    messages: [],
+    timestamp: new Date().toLocaleString(),
+    lastActivity: Date.now()
+  };
   conversations.push(conv);
   activeConversationId = id;
   saveConversations();
   return conv;
 }
 
+// Human-friendly "last activity" label for the history list.
+function formatLastActivity(conv) {
+  const stamp = conv.lastActivity || conv.timestamp;
+  if (!stamp) return "";
+
+  const date = new Date(stamp);
+  if (isNaN(date.getTime())) return "";
+
+  const now = new Date();
+  const sameDay = date.toDateString() === now.toDateString();
+
+  if (sameDay) {
+    return date.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  }
+
+  return date.toLocaleDateString([], {
+    month: "short",
+    day: "numeric"
+  });
+}
+
 // Markdown rendering helpers
-function renderMarkdown(content, isTomMessage) {
+// Renders normal text, headings, bullet lists, numbered lists,
+// inline code and fenced code blocks (with a Copy button).
+// Only renders what Tom/user wrote; hidden reasoning is never added.
+function inlineFormat(str) {
+  return String(str).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+}
+
+function renderCodeBlock(block) {
+  const lang = block.lang ? escapeHtml(block.lang) : "text";
+  const code = escapeHtml(block.code);
+
+  return (
+    '<div class="code-block">' +
+      '<div class="code-block-header">' +
+        '<span class="code-lang">' + lang + "</span>" +
+        '<button class="code-copy" type="button">Copy</button>' +
+      "</div>" +
+      '<pre><code class="language-' + lang + '">' + code + "</code></pre>" +
+    "</div>"
+  );
+}
+
+function renderMarkdown(content) {
   if (!content) return "";
 
-  let html = String(content);
+  let text = String(content).replace(/\r\n/g, "\n");
 
-  // Handle code blocks (fenced)
-  html = html.replace(/```[\s\S]*?```/g, (match) => {
-    const codeBlock = match.replace(/```/g, "").trim();
-    return `<pre><code class="language-text">${escapeHtml(codeBlock)}</code></pre>`;
+  // 1) Protect fenced code blocks before anything else.
+  const codeBlocks = [];
+  text = text.replace(/```([\s\S]*?)```/g, (match, body) => {
+    let code = body.replace(/^\n/, "").replace(/\n$/, "");
+    let lang = "";
+
+    const langMatch = code.match(/^([a-zA-Z0-9_+#.-]+)[ \t]*\n/);
+    if (langMatch) {
+      lang = langMatch[1];
+      code = code.slice(langMatch[0].length);
+    }
+
+    codeBlocks.push({ lang, code });
+    return "\n\u0000CODE" + (codeBlocks.length - 1) + "\u0000\n";
   });
 
-  // Handle inline code
-  html = html.replace(/`([^`]+)`/g, (_, code) => `<code>${escapeHtml(code)}</code>`);
+  // 2) Escape everything that is left.
+  text = escapeHtml(text);
 
-  // Handle headings
-  html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
-  html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
-  html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+  // 3) Inline code.
+  text = text.replace(/`([^`\n]+)`/g, "<code>$1</code>");
 
-  // Handle bold and italic
-  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  // 4) Line-based block parsing.
+  const lines = text.split("\n");
+  const html = [];
+  let listOpen = null;
 
-  // Handle unordered lists - convert to <ul>
-  // Simple: convert lines starting with "- " or "* " to <li>
-  html = html.replace(/^\- (.+)$/gm, '<li>$1</li>');
-  html = html.replace(/^\* (.+)$/gm, '<li>$1</li>');
+  const closeList = () => {
+    if (listOpen) {
+      html.push(listOpen === "ul" ? "</ul>" : "</ol>");
+      listOpen = null;
+    }
+  };
 
-  // Handle line breaks - convert \n to <br>
-  html = html.replace(/\n/g, '<br>');
+  for (const line of lines) {
+    const codeMatch = line.match(/^\u0000CODE(\d+)\u0000$/);
 
-  return html;
+    if (codeMatch) {
+      closeList();
+      const block = codeBlocks[Number(codeMatch[1])];
+      if (block) html.push(renderCodeBlock(block));
+      continue;
+    }
+
+    const heading = line.match(/^(#{1,6})\s+(.+)$/);
+    if (heading) {
+      closeList();
+      const level = heading[1].length;
+      html.push(
+        "<h" + level + ">" + inlineFormat(heading[2]) + "</h" + level + ">"
+      );
+      continue;
+    }
+
+    const bullet = line.match(/^\s*[-*+]\s+(.+)$/);
+    if (bullet) {
+      if (listOpen !== "ul") {
+        closeList();
+        html.push("<ul>");
+        listOpen = "ul";
+      }
+      html.push("<li>" + inlineFormat(bullet[1]) + "</li>");
+      continue;
+    }
+
+    const numbered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+    if (numbered) {
+      if (listOpen !== "ol") {
+        closeList();
+        html.push("<ol>");
+        listOpen = "ol";
+      }
+      html.push("<li>" + inlineFormat(numbered[1]) + "</li>");
+      continue;
+    }
+
+    closeList();
+
+    if (line.trim() === "") {
+      continue;
+    }
+
+    html.push("<p>" + inlineFormat(line) + "</p>");
+  }
+
+  closeList();
+
+  return html.join("");
 }
 
 function escapeHtml(unsafe) {
@@ -212,27 +326,117 @@ const sendButton = document.getElementById("tomSendButton");
 const responseDisplay = document.getElementById("tomResponse");
 const composerForm = document.getElementById("tomComposer");
 
-// Collapse/expand panel
-function togglePanel() {
-  collapsed = !collapsed;
-  panel.classList.toggle("collapsed", collapsed);
+// One layout state for the existing navigation and Tom panels.
+const mobileLayout = window.matchMedia("(max-width: 900px)");
+const sidebar = document.getElementById("sidebar");
+const sidebarToggle = document.getElementById("sidebarToggle");
+const sidebarClose = document.getElementById("sidebarClose");
+const tomOpenToggle = document.getElementById("tomOpenToggle");
+const panelBackdrop = document.getElementById("panelBackdrop");
+const mainContent = document.querySelector(".app");
+let desktopPanels = { sidebarCollapsed: false, tomCollapsed: false };
+let mobileDrawer = null;
+try {
+  const saved = JSON.parse(sessionStorage.getItem("tomPanelLayout"));
+  if (saved) desktopPanels = {
+    sidebarCollapsed: saved.sidebarCollapsed === true,
+    tomCollapsed: saved.tomCollapsed === true
+  };
+} catch (_) { /* Storage may be unavailable. */ }
 
-  // Adjust body padding when panel collapses
-  const mainContent = document.querySelector(".app");
-  if (collapsed) {
-    mainContent.style.paddingRight = "calc(300px - 22px + 230px)";
-    toggleButton.textContent = "❁";
-    toggleButton.setAttribute("aria-label", "Expand Tom panel");
-  } else {
-    mainContent.style.paddingRight = "300px";
-    toggleButton.textContent = "❃";
-    toggleButton.setAttribute("aria-label", "Collapse Tom panel");
-  }
+navItems.forEach((item) => {
+  const label = item.lastElementChild.textContent.trim();
+  item.setAttribute("aria-label", label);
+  item.title = label;
+});
+
+function applyPanelLayout() {
+  const mobile = mobileLayout.matches;
+  const navOpen = mobile ? mobileDrawer === "navigation" : !desktopPanels.sidebarCollapsed;
+  collapsed = mobile ? mobileDrawer !== "tom" : desktopPanels.tomCollapsed;
+  document.body.classList.toggle("sidebar-collapsed", !mobile && !navOpen);
+  document.body.classList.toggle("tom-collapsed", collapsed);
+  document.body.classList.toggle("nav-mobile-open", mobile && navOpen);
+  document.body.classList.toggle("tom-mobile-open", mobile && !collapsed);
+  document.body.classList.toggle("drawer-open", mobile && mobileDrawer !== null);
+  sidebar.inert = mobile && !navOpen;
+  panel.inert = collapsed;
+  mainContent.inert = mobile && mobileDrawer !== null;
+  sidebar.setAttribute("aria-hidden", String(mobile && !navOpen));
+  panel.setAttribute("aria-hidden", String(collapsed));
+  sidebarToggle.setAttribute("aria-expanded", String(navOpen));
+  sidebarToggle.setAttribute("aria-label", navOpen ? "Collapse navigation" : "Open navigation");
+  tomOpenToggle.setAttribute("aria-expanded", String(!collapsed));
+  tomOpenToggle.inert = mobile && mobileDrawer !== null;
+  toggleButton.setAttribute("aria-label", mobile ? "Close Tom" : "Collapse Tom");
+  toggleButton.title = mobile ? "Close Tom" : "Collapse Tom";
+  toggleButton.textContent = mobile ? "×" : "›";
+  panelBackdrop.hidden = !mobile || mobileDrawer === null;
 }
 
+function savePanelLayout() {
+  try { sessionStorage.setItem("tomPanelLayout", JSON.stringify(desktopPanels)); }
+  catch (_) { /* Keep working without storage. */ }
+}
+
+function closeMobileDrawers() {
+  const previous = mobileDrawer;
+  mobileDrawer = null;
+  applyPanelLayout();
+  if (previous) (previous === "tom" ? tomOpenToggle : sidebarToggle).focus();
+}
+
+function togglePanel() {
+  if (mobileLayout.matches) {
+    if (mobileDrawer === "tom") return closeMobileDrawers();
+    mobileDrawer = "tom";
+  } else {
+    desktopPanels.tomCollapsed = !desktopPanels.tomCollapsed;
+    savePanelLayout();
+  }
+  applyPanelLayout();
+  (collapsed ? tomOpenToggle : toggleButton).focus();
+}
+
+sidebarToggle.addEventListener("click", () => {
+  if (mobileLayout.matches) {
+    mobileDrawer = mobileDrawer === "navigation" ? null : "navigation";
+  } else {
+    desktopPanels.sidebarCollapsed = !desktopPanels.sidebarCollapsed;
+    savePanelLayout();
+  }
+  applyPanelLayout();
+  if (mobileDrawer === "navigation") sidebarClose.focus();
+});
+sidebarClose.addEventListener("click", closeMobileDrawers);
+panelBackdrop.addEventListener("click", closeMobileDrawers);
 toggleButton.addEventListener("click", togglePanel);
+tomOpenToggle.addEventListener("click", togglePanel);
+mobileLayout.addEventListener("change", () => {
+  mobileDrawer = null;
+  applyPanelLayout();
+  if (document.activeElement.closest("[inert]")) sidebarToggle.focus();
+});
+document.addEventListener("keydown", (event) => {
+  if (!mobileLayout.matches || !mobileDrawer) return;
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closeMobileDrawers();
+  } else if (event.key === "Tab") {
+    const drawer = mobileDrawer === "tom" ? panel : sidebar;
+    const controls = [...drawer.querySelectorAll("button:not(:disabled), input, textarea, [tabindex='0']")]
+      .filter((el) => el.getClientRects().length > 0);
+    const first = controls[0], last = controls[controls.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault(); last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault(); first.focus();
+    }
+  }
+});
 panel.setAttribute("role", "complementary");
 panel.setAttribute("aria-label", "Tom AI assistant");
+applyPanelLayout();
 
 // History toggle
 let historyVisible = false;
@@ -282,9 +486,16 @@ function renderHistory() {
   conversations.slice().reverse().forEach((conv) => {
     const item = document.createElement("div");
     item.className = "tom-history-item" + (conv.id === activeConversationId ? " active" : "");
+
+    const messageCount = conv.messages?.length || 0;
+    const activity = formatLastActivity(conv);
+
     item.innerHTML = `
-      <div class="conversation-title" style="font-weight:600;margin-bottom:4px;">${escapeHtml(conv.title || "Conversation")}</div>
-      <div class="conversation-preview" style="color:var(--muted);font-size:11px;">${conv.messages?.length > 0 ? `${conv.messages.length} messages` : ""}</div>
+      <div class="conversation-title">${escapeHtml(conv.title || "Conversation")}</div>
+      <div class="conversation-meta">
+        <span class="conversation-preview">${messageCount > 0 ? `${messageCount} messages` : "No messages"}</span>
+        <span class="conversation-time">${escapeHtml(activity)}</span>
+      </div>
     `;
     item.addEventListener("click", () => loadConversation(conv));
     historyList.appendChild(item);
@@ -300,7 +511,61 @@ function loadConversation(conv) {
   updateInputState(true);
 }
 
-// Render messages with markdown support
+// Normalize stored roles to a display role:
+// user | tom | system
+function displayRole(role) {
+  if (role === "user") return "user";
+  if (role === "system" || role === "tool") return "system";
+  return "tom";
+}
+
+function roleLabel(role) {
+  if (role === "system") return "System";
+  if (role === "tool") return "Tool activity";
+  if (role === "user") return "You";
+  return "Tom";
+}
+
+// Attach Copy behavior to every code block in a container.
+function wireCodeCopy(container) {
+  container.querySelectorAll(".code-copy").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const block = button.closest(".code-block");
+      const codeEl = block ? block.querySelector("code") : null;
+      if (!codeEl) return;
+
+      const text = codeEl.textContent;
+
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          const area = document.createElement("textarea");
+          area.value = text;
+          area.style.position = "fixed";
+          area.style.opacity = "0";
+          document.body.appendChild(area);
+          area.select();
+          document.execCommand("copy");
+          document.body.removeChild(area);
+        }
+
+        const original = button.textContent;
+        button.textContent = "Copied";
+        button.classList.add("copied");
+        setTimeout(() => {
+          button.textContent = original;
+          button.classList.remove("copied");
+        }, 1400);
+      } catch (e) {
+        button.textContent = "Copy failed";
+      }
+    });
+  });
+}
+
+// Render messages with markdown support.
+// Clearly distinguishes user, Tom, and system/tool activity.
 function renderMessages(messages) {
   messagesContainer.innerHTML = "";
 
@@ -309,34 +574,46 @@ function renderMessages(messages) {
     return;
   }
 
-  messages.forEach((msg, msgIndex) => {
-    const msgDiv = document.createElement("div");
-    msgDiv.className = `tom-message ${msg.role}`;
-    msgDiv.setAttribute("role", "alert");
-    const msgDir = msg.role === "user" ? "user" : "assistant";
+  messages.forEach((msg) => {
+    const role = displayRole(msg.role);
 
-    // Render the content as markdown
-    const rendered = renderMarkdown(msg.content, msg.role === "tom");
+    const msgDiv = document.createElement("div");
+    msgDiv.className = `tom-message ${role}`;
+
+    // Only live chat turns announce; system/tool notes stay quiet.
+    if (role !== "system") {
+      msgDiv.setAttribute("role", "alert");
+    }
+
+    const rendered = renderMarkdown(msg.content);
+
+    const largeBadge = msg.largeFile
+      ? '<span class="large-file-note">Large file — targeted analysis required</span>'
+      : "";
 
     msgDiv.innerHTML = `
+      <div class="message-role">${roleLabel(msg.role)}</div>
       <div class="message-content">
+        ${largeBadge}
         ${rendered}
       </div>
     `;
 
-    // Add small timestamp for Tom messages
-    if (msg.role === "tom" && msg.timestamp) {
+    // Render any code Copy buttons created by renderMarkdown.
+    wireCodeCopy(msgDiv);
+
+    // Add small timestamp for Tom messages.
+    if (role === "tom" && msg.timestamp) {
       const timeSpan = document.createElement("span");
-      timeSpan.style.fontSize = "10px";
-      timeSpan.style.color = "var(--muted)";
-      timeSpan.textContent = ` ${msg.timestamp}`;
+      timeSpan.className = "message-time";
+      timeSpan.textContent = msg.timestamp;
       msgDiv.querySelector(".message-content").appendChild(timeSpan);
     }
 
     messagesContainer.appendChild(msgDiv);
   });
 
-  // Scroll to bottom
+  // Scroll to bottom.
   requestAnimationFrame(() => {
     messagesContainer.scrollTo({
       top: messagesContainer.scrollHeight,
@@ -350,7 +627,7 @@ function updateInputState(enable = true) {
   if (enable) {
     sendButton.disabled = false;
     inputField.disabled = false;
-    inputField.focus();
+    if (!collapsed && !mobileLayout.matches) inputField.focus();
     responseDisplay.textContent = "Tom is ready.";
   } else {
     sendButton.disabled = true;
@@ -377,6 +654,7 @@ async function sendMessage() {
     timestamp: new Date().toISOString()
   };
   conv.messages.push(userMsg);
+  conv.lastActivity = Date.now();
   saveConversations();
 
   // Re-render all messages in this conversation
@@ -422,6 +700,7 @@ async function sendMessage() {
       timestamp: new Date().toISOString()
     };
     conv.messages.push(tomMsg);
+    conv.lastActivity = Date.now();
     saveConversations();
 
     // Re-render entire conversation
@@ -437,6 +716,7 @@ async function sendMessage() {
       timestamp: new Date().toISOString()
     };
     conv.messages.push(errorMsg);
+    conv.lastActivity = Date.now();
     saveConversations();
     renderMessages(conv.messages);
     renderHistory();
@@ -498,17 +778,198 @@ composerForm.addEventListener("submit", (event) => {
   sendMessage();
 });
 
-// Initialize
-function initTomPanel() {
-  // Set initial height based on available space
-  const panelBody = document.querySelector(".tom-panel-body");
-  if (panelBody) {
-    const headerHeight = document.querySelector(".tom-header")?.offsetHeight || 56;
-    const composerHeight = document.querySelector(".tom-composer")?.offsetHeight || 56;
-    const historyHeight = document.querySelector(".tom-history")?.offsetHeight || 0;
-    panelBody.style.minHeight = `calc(100vh - ${headerHeight + composerHeight + historyHeight + 120}px)`;
+// ---------------------------------------
+// QUICK ACTIONS DROPDOWN
+// ---------------------------------------
+// One compact dropdown replacing the old suggested-prompt buttons.
+// Reuses the existing chat composer (/chat) and file analysis
+// (/analyze-file). No new AI endpoints or chat system.
+
+const quickActionsToggle = document.getElementById("quickActionsToggle");
+const quickActionsMenu = document.getElementById("quickActionsMenu");
+
+function openQuickActions() {
+  if (!quickActionsMenu) return;
+  quickActionsMenu.hidden = false;
+  if (quickActionsToggle) {
+    quickActionsToggle.setAttribute("aria-expanded", "true");
+  }
+}
+
+function closeQuickActions() {
+  if (!quickActionsMenu) return;
+  quickActionsMenu.hidden = true;
+  if (quickActionsToggle) {
+    quickActionsToggle.setAttribute("aria-expanded", "false");
+  }
+}
+
+function toggleQuickActions() {
+  if (!quickActionsMenu) return;
+  if (quickActionsMenu.hidden) {
+    openQuickActions();
+  } else {
+    closeQuickActions();
+  }
+}
+
+// Send a normal chat prompt through the existing composer flow.
+function runQuickChat(prompt) {
+  if (!prompt) return;
+  if (collapsed) {
+    togglePanel();
+  }
+  inputField.value = prompt;
+  sendMessage();
+}
+
+// Show a clear message when a file action is used with no active file.
+function showNoFileContext(actionLabel) {
+  if (collapsed) {
+    togglePanel();
   }
 
+  let conv = getActiveConversation();
+  if (!conv) {
+    conv = createConversation("Quick Actions");
+  }
+
+  conv.messages.push({
+    role: "system",
+    content:
+      '"' + actionLabel + '" needs a current file. ' +
+      "Open Workspace, select a file, or use " +
+      '"Ask Tom about this file" first.',
+    timestamp: new Date().toISOString()
+  });
+  conv.lastActivity = Date.now();
+  saveConversations();
+  renderMessages(conv.messages);
+  renderHistory();
+  updateInputState(true);
+}
+
+// Run a file action against the existing active file context
+// using the existing /analyze-file endpoint.
+async function runFileAction(question, actionLabel) {
+  const file = activeFileContext || selectedWorkspaceFile;
+
+  if (!file) {
+    showNoFileContext(actionLabel);
+    return;
+  }
+
+  if (collapsed) {
+    togglePanel();
+  }
+
+  setActiveFileContext(file);
+
+  let conv = getActiveConversation();
+  if (!conv) {
+    conv = createConversation(actionLabel + " — " + file);
+  }
+
+  conv.messages.push({
+    role: "user",
+    content: actionLabel + ": " + file,
+    timestamp: new Date().toISOString()
+  });
+  conv.lastActivity = Date.now();
+  saveConversations();
+  renderMessages(conv.messages);
+  renderHistory();
+
+  responseDisplay.textContent = "Tom is analyzing " + file + "…";
+
+  try {
+    const response = await fetch("/analyze-file", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        path: file,
+        question: question
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Tom file analysis failed");
+    }
+
+    const tomMsg = {
+      role: "tom",
+      content: data.reply || "Tom returned no response.",
+      timestamp: new Date().toISOString(),
+      largeFile: data.largeFile === true
+    };
+
+    conv.messages.push(tomMsg);
+    conv.lastActivity = Date.now();
+    saveConversations();
+    renderMessages(conv.messages);
+    renderHistory();
+  } catch (error) {
+    conv.messages.push({
+      role: "tom",
+      content: "Tom file analysis error: " + error.message,
+      timestamp: new Date().toISOString()
+    });
+    conv.lastActivity = Date.now();
+    saveConversations();
+    renderMessages(conv.messages);
+    renderHistory();
+  } finally {
+    updateInputState(true);
+  }
+}
+
+if (quickActionsToggle && quickActionsMenu) {
+  quickActionsToggle.addEventListener("click", (event) => {
+    event.stopPropagation();
+    toggleQuickActions();
+  });
+
+  quickActionsMenu.addEventListener("click", (event) => {
+    event.stopPropagation();
+
+    const button = event.target.closest("button[data-action]");
+    if (!button) return;
+
+    const action = button.dataset.action;
+    const prompt = button.dataset.prompt || "";
+    const question = button.dataset.question || prompt;
+    const label = button.textContent.trim();
+
+    closeQuickActions();
+
+    if (action === "file") {
+      runFileAction(question, label);
+    } else {
+      runQuickChat(prompt);
+    }
+  });
+
+  document.addEventListener("click", (event) => {
+    if (quickActionsMenu.hidden) return;
+    if (!event.target.closest("#tomActions")) {
+      closeQuickActions();
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !quickActionsMenu.hidden) {
+      closeQuickActions();
+      quickActionsToggle.focus();
+    }
+  });
+}
+
+// Initialize
+function initTomPanel() {
   // Render initial history
   renderHistory();
 
@@ -517,7 +978,7 @@ function initTomPanel() {
 
   // Focus input after a short delay
   setTimeout(() => {
-    inputField.focus();
+    if (!collapsed && !mobileLayout.matches) inputField.focus();
   }, 100);
 }
 
@@ -776,6 +1237,9 @@ async function askTomAboutFile() {
     togglePanel();
   }
 
+  // Show the active file as a removable context chip.
+  setActiveFileContext(selectedWorkspaceFile);
+
   const question =
     "Explain what this file does, its key responsibilities, " +
     "and anything important to know about it.";
@@ -796,6 +1260,7 @@ async function askTomAboutFile() {
   };
 
   conv.messages.push(userMsg);
+  conv.lastActivity = Date.now();
   saveConversations();
   renderMessages(conv.messages);
   renderHistory();
@@ -823,13 +1288,17 @@ async function askTomAboutFile() {
       );
     }
 
+    // Oversized files are never sent to the model in full.
+    // The server returns a clear "large file" result instead.
     const tomMsg = {
       role: "tom",
       content: data.reply || "Tom returned no response.",
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      largeFile: data.largeFile === true
     };
 
     conv.messages.push(tomMsg);
+    conv.lastActivity = Date.now();
     saveConversations();
     renderMessages(conv.messages);
     renderHistory();
@@ -843,6 +1312,7 @@ async function askTomAboutFile() {
     };
 
     conv.messages.push(errorMsg);
+    conv.lastActivity = Date.now();
     saveConversations();
     renderMessages(conv.messages);
     renderHistory();
@@ -850,6 +1320,135 @@ async function askTomAboutFile() {
   } finally {
     updateInputState(true);
   }
+}
+
+// ---------------------------------------
+// ACTIVE CONTEXT (removable chip)
+// ---------------------------------------
+// Shows the active file above the composer, e.g. "fibonacci.py ×".
+// Removing the chip clears the active file context.
+// The file contents are never pasted into the visible composer.
+
+const tomContextChips = document.getElementById("tomContextChips");
+const tomContext = document.getElementById("tomContext");
+let activeFileContext = null;
+
+function renderContextChips() {
+  if (!tomContextChips) return;
+
+  tomContextChips.innerHTML = "";
+
+  if (!activeFileContext) {
+    tomContextChips.hidden = true;
+    if (tomContext) tomContext.textContent = "Project: Drop";
+    return;
+  }
+
+  tomContextChips.hidden = false;
+
+  const chip = document.createElement("span");
+  chip.className = "context-chip";
+
+  const label = document.createElement("span");
+  label.className = "context-chip-label";
+  label.textContent = activeFileContext;
+
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "context-chip-remove";
+  remove.setAttribute("aria-label", "Remove file context");
+  remove.textContent = "×";
+  remove.addEventListener("click", () => {
+    activeFileContext = null;
+    renderContextChips();
+  });
+
+  chip.appendChild(label);
+  chip.appendChild(remove);
+  tomContextChips.appendChild(chip);
+
+  if (tomContext) {
+    tomContext.textContent = "File: " + activeFileContext;
+  }
+}
+
+function setActiveFileContext(fileName) {
+  activeFileContext = fileName;
+  renderContextChips();
+}
+
+// ---------------------------------------
+// DESKTOP PANEL RESIZE (draggable divider)
+// ---------------------------------------
+
+const tomDivider = document.getElementById("tomDivider");
+const TOM_MIN_WIDTH = 280;
+const TOM_MAX_WIDTH = 720;
+let tomWidth = 300;
+
+try {
+  const savedWidth = Number(sessionStorage.getItem("tomPanelWidth"));
+  if (savedWidth >= TOM_MIN_WIDTH && savedWidth <= TOM_MAX_WIDTH) {
+    tomWidth = savedWidth;
+  }
+} catch (_) { /* Storage may be unavailable. */ }
+
+function applyTomWidth() {
+  document.documentElement.style.setProperty("--tom-width", tomWidth + "px");
+}
+
+function saveTomWidth() {
+  try { sessionStorage.setItem("tomPanelWidth", String(tomWidth)); }
+  catch (_) { /* Keep working without storage. */ }
+}
+
+applyTomWidth();
+
+if (tomDivider) {
+  let dragging = false;
+
+  const onMove = (event) => {
+    if (!dragging) return;
+    const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+    const next = window.innerWidth - clientX;
+    tomWidth = Math.min(TOM_MAX_WIDTH, Math.max(TOM_MIN_WIDTH, next));
+    applyTomWidth();
+  };
+
+  const stopDrag = () => {
+    if (!dragging) return;
+    dragging = false;
+    document.body.classList.remove("tom-resizing");
+    saveTomWidth();
+  };
+
+  const startDrag = (event) => {
+    if (mobileLayout.matches) return;
+    dragging = true;
+    document.body.classList.add("tom-resizing");
+    event.preventDefault();
+  };
+
+  tomDivider.addEventListener("mousedown", startDrag);
+  tomDivider.addEventListener("touchstart", startDrag, { passive: false });
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("touchmove", onMove, { passive: false });
+  window.addEventListener("mouseup", stopDrag);
+  window.addEventListener("touchend", stopDrag);
+
+  // Keyboard resize for accessibility.
+  tomDivider.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowLeft") {
+      tomWidth = Math.min(TOM_MAX_WIDTH, tomWidth + 20);
+    } else if (event.key === "ArrowRight") {
+      tomWidth = Math.max(TOM_MIN_WIDTH, tomWidth - 20);
+    } else {
+      return;
+    }
+    event.preventDefault();
+    applyTomWidth();
+    saveTomWidth();
+  });
 }
 
 // Wire up Workspace controls.
