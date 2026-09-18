@@ -1,5 +1,9 @@
+require("dotenv").config();
+
 const express = require("express");
 const path = require("path");
+
+const { askNvidia } = require("./nvidia-router");
 
 const {
   DROP_ROOT,
@@ -9,22 +13,39 @@ const {
 
 const app = express();
 
-app.use(express.json());
+app.use(express.json({ limit: "2mb" }));
+
 
 // ---------------------------------------
 // TOM CONFIGURATION
 // ---------------------------------------
 
-const OMNIROUTE_URL = "http://127.0.0.1:20128";
-const MODEL = "my-combo";
+const PORT = 3001;
+
+const TOM_SYSTEM_PROMPT = `
+You are Tom, the AI intelligence layer for this project workspace.
+
+Be concise, accurate, evidence-driven, and project-focused.
+
+Rules:
+1. Maintain context from the conversation history provided to you.
+2. Treat previous user and assistant messages as part of the same conversation.
+3. Do not claim that you executed an action unless the system actually performed it.
+4. Do not claim that you modified files unless the system actually modified them.
+5. Clearly separate facts from assumptions or inference.
+6. When project evidence is provided, ground your answer in that evidence.
+`.trim();
 
 
 // ---------------------------------------
 // TOM DASHBOARD
 // ---------------------------------------
 
-// Serve everything inside /public
-app.use(express.static(path.join(__dirname, "public")));
+app.use(
+  express.static(
+    path.join(__dirname, "public")
+  )
+);
 
 
 // ---------------------------------------
@@ -35,56 +56,108 @@ app.post("/chat", async (req, res) => {
   try {
     const message = req.body.message;
 
-    if (!message || !message.trim()) {
+    const history = Array.isArray(req.body.history)
+      ? req.body.history
+      : [];
+
+    if (
+      typeof message !== "string" ||
+      !message.trim()
+    ) {
       return res.status(400).json({
         error: "Message is required"
       });
     }
 
-    const response = await fetch(
-      `${OMNIROUTE_URL}/v1/chat/completions`,
+    /*
+      public/app.js sends previous messages as:
+
       {
-        method: "POST",
-
-        headers: {
-          "Content-Type": "application/json"
-        },
-
-        body: JSON.stringify({
-          model: MODEL,
-
-          messages: [
-            {
-              role: "system",
-              content:
-                "You are Tom, the AI intelligence layer for this project workspace. Be concise, accurate, evidence-driven, and project-focused. Do not claim that you executed an action unless the system actually performed it."
-            },
-            {
-              role: "user",
-              content: message.trim()
-            }
-          ]
-        })
+        role: "user" | "assistant",
+        content: "..."
       }
-    );
 
-    const data = await response.json();
+      Validate them before sending them to the model.
+    */
 
-    if (!response.ok) {
-      return res
-        .status(response.status)
-        .json(data);
+    const safeHistory = history
+      .filter((item) => {
+        return (
+          item &&
+          (item.role === "user" ||
+            item.role === "assistant") &&
+          typeof item.content === "string" &&
+          item.content.trim()
+        );
+      })
+      .map((item) => ({
+        role: item.role,
+        content: item.content.trim()
+      }));
+
+
+    /*
+      IMPORTANT:
+
+      This creates ONE continuous model conversation:
+
+      system
+      previous user message
+      previous Tom response
+      previous user message
+      previous Tom response
+      ...
+      current user message
+    */
+
+    const messages = [
+      {
+        role: "system",
+        content: TOM_SYSTEM_PROMPT
+      },
+
+      ...safeHistory,
+
+      {
+        role: "user",
+        content: message.trim()
+      }
+    ];
+
+
+    // NVIDIA router automatically tries its configured
+    // models until one succeeds.
+    const result = await askNvidia(messages);
+
+
+    if (!result || !result.content) {
+      throw new Error(
+        "NVIDIA returned an empty response"
+      );
     }
 
+
     return res.json({
-      reply:
-        data.choices?.[0]?.message?.content ||
-        "No response"
+      reply: result.content,
+
+      provider: "nvidia-direct",
+
+      model: result.model,
+
+      historyMessages:
+        safeHistory.length + 1
     });
 
   } catch (error) {
-    return res.status(500).json({
-      error: error.message
+    console.error(
+      "[Tom Chat Error]",
+      error
+    );
+
+    return res.status(503).json({
+      error:
+        error.message ||
+        "Tom intelligence provider unavailable"
     });
   }
 });
@@ -98,11 +171,18 @@ app.get("/project", (req, res) => {
   try {
     return res.json({
       project: "Project Workspace",
+
       root: DROP_ROOT,
+
       files: listProjectFiles()
     });
 
   } catch (error) {
+    console.error(
+      "[Project Error]",
+      error
+    );
+
     return res.status(500).json({
       error: error.message
     });
@@ -124,15 +204,25 @@ app.get("/file", (req, res) => {
       });
     }
 
-    const content = readProjectFile(filePath);
+
+    const content =
+      readProjectFile(filePath);
+
 
     return res.json({
       project: "Project Workspace",
+
       path: filePath,
+
       content
     });
 
   } catch (error) {
+    console.error(
+      "[File Read Error]",
+      error
+    );
+
     return res.status(400).json({
       error: error.message
     });
@@ -144,28 +234,41 @@ app.get("/file", (req, res) => {
 // TOM FILE ANALYSIS
 // ---------------------------------------
 
-app.post("/analyze-file", async (req, res) => {
-  try {
-    const filePath = req.body.path;
-    const question = req.body.question;
+app.post(
+  "/analyze-file",
+  async (req, res) => {
+    try {
+      const filePath =
+        req.body.path;
 
-    if (!filePath) {
-      return res.status(400).json({
-        error: "File path is required"
-      });
-    }
+      const question =
+        req.body.question;
 
-    if (!question || !question.trim()) {
-      return res.status(400).json({
-        error: "Question is required"
-      });
-    }
 
-    const content = readProjectFile(filePath);
+      if (!filePath) {
+        return res.status(400).json({
+          error:
+            "File path is required"
+        });
+      }
 
-    const prompt = `
-You are Tom, the AI intelligence layer for an authorized software project workspace.
 
+      if (
+        typeof question !== "string" ||
+        !question.trim()
+      ) {
+        return res.status(400).json({
+          error:
+            "Question is required"
+        });
+      }
+
+
+      const content =
+        readProjectFile(filePath);
+
+
+      const analysisPrompt = `
 Project root:
 ${DROP_ROOT}
 
@@ -184,88 +287,123 @@ User request:
 
 ${question.trim()}
 
-Rules:
+File analysis rules:
 
 1. Analyze only what is supported by the provided source code.
 2. Clearly separate facts from inference.
 3. Do not claim that you modified files.
 4. Do not claim that you executed commands.
-5. Do not invent project architecture that is not supported by the source.
-6. If additional project files are required, identify the specific files or types of files Tom should inspect next.
+5. Do not invent project architecture not supported by the source.
+6. If additional files are required, identify the specific files Tom should inspect next.
 7. Keep the response focused on the user's request.
-`;
+`.trim();
 
-    const response = await fetch(
-      `${OMNIROUTE_URL}/v1/chat/completions`,
-      {
-        method: "POST",
 
-        headers: {
-          "Content-Type": "application/json"
+      const messages = [
+        {
+          role: "system",
+          content:
+            TOM_SYSTEM_PROMPT
         },
 
-        body: JSON.stringify({
-          model: MODEL,
+        {
+          role: "user",
+          content:
+            analysisPrompt
+        }
+      ];
 
-          messages: [
-            {
-              role: "user",
-              content: prompt
-            }
-          ]
-        })
+
+      const result =
+        await askNvidia(messages);
+
+
+      if (
+        !result ||
+        !result.content
+      ) {
+        throw new Error(
+          "NVIDIA returned an empty response"
+        );
       }
-    );
 
-    const data = await response.json();
 
-    if (!response.ok) {
-      return res
-        .status(response.status)
-        .json(data);
+      return res.json({
+        project:
+          "Project Workspace",
+
+        file:
+          filePath,
+
+        reply:
+          result.content,
+
+        provider:
+          "nvidia-direct",
+
+        model:
+          result.model
+      });
+
+    } catch (error) {
+      console.error(
+        "[Tom File Analysis Error]",
+        error
+      );
+
+      return res.status(503).json({
+        error:
+          error.message ||
+          "Tom file analysis unavailable"
+      });
     }
-
-    return res.json({
-      project: "Project Workspace",
-      file: filePath,
-
-      reply:
-        data.choices?.[0]?.message?.content ||
-        "No response"
-    });
-
-  } catch (error) {
-    return res.status(500).json({
-      error: error.message
-    });
   }
-});
+);
 
 
 // ---------------------------------------
 // TOM BACKEND HEALTH
 // ---------------------------------------
 
-app.get("/health", async (req, res) => {
-  try {
-    const response = await fetch(
-      `${OMNIROUTE_URL}/v1/models`
+app.get("/health", (req, res) => {
+  const nvidiaConfigured =
+    Boolean(
+      process.env.NVIDIA_API_KEY
     );
 
-    return res.json({
-      tomServer: "connected",
-      intelligenceGateway:
-        response.ok ? "connected" : "degraded",
-      model: MODEL
-    });
 
-  } catch (error) {
-    return res.status(503).json({
-      tomServer: "connected",
-      intelligenceGateway: "disconnected",
-      model: MODEL
+  return res
+    .status(
+      nvidiaConfigured
+        ? 200
+        : 503
+    )
+    .json({
+      status:
+        nvidiaConfigured
+          ? "ok"
+          : "degraded",
+
+      tomServer:
+        "connected",
+
+      intelligenceGateway:
+        nvidiaConfigured
+          ? "configured"
+          : "missing-api-key",
+
+      provider:
+        "nvidia-direct",
+
+      router:
+        "enabled",
+
+      project:
+        "DROP",
+
+      projectRoot:
+        DROP_ROOT
     });
-  }
 });
 
 
@@ -273,11 +411,18 @@ app.get("/health", async (req, res) => {
 // DASHBOARD FALLBACK
 // ---------------------------------------
 
-app.get("/{*splat}", (req, res) => {
-  res.sendFile(
-    path.join(__dirname, "public", "index.html")
-  );
-});
+app.get(
+  "/{*splat}",
+  (req, res) => {
+    res.sendFile(
+      path.join(
+        __dirname,
+        "public",
+        "index.html"
+      )
+    );
+  }
+);
 
 
 // ---------------------------------------
@@ -285,14 +430,27 @@ app.get("/{*splat}", (req, res) => {
 // ---------------------------------------
 
 app.listen(
-  3001,
+  PORT,
   "0.0.0.0",
   () => {
     console.log("");
-    console.log("Tom Project Workspace running on port 3001");
-    console.log(`Authorized project: ${DROP_ROOT}`);
-    console.log(`Intelligence gateway: OmniRoute`);
-    console.log(`Model route: ${MODEL}`);
+
+    console.log(
+      `Tom Project Workspace running on port ${PORT}`
+    );
+
+    console.log(
+      `Authorized project: ${DROP_ROOT}`
+    );
+
+    console.log(
+      "Intelligence gateway: NVIDIA Direct"
+    );
+
+    console.log(
+      "NVIDIA model failover router: enabled"
+    );
+
     console.log("");
   }
 );

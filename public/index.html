@@ -195,6 +195,101 @@
       </section>
 
 
+      <!-- CONNECTED TOOLS -->
+      <section class="card">
+        <div class="card-header">
+          <h2>Connected Applications</h2>
+          <button class="text-button">View All</button>
+        </div>
+        <div class="connected-tools-grid">
+          <div class="tool-card">
+            <div class="tool-card-header">
+              <div class="tool-icon db">☁</div>
+              <div class="tool-name">Source Database</div>
+            </div>
+            <div class="tool-status">
+              <span class="status-dot"></span>
+              <span class="status-text healthy">Connected</span>
+            </div>
+            <div class="tool-meta">
+              <span>✓ Replication OK</span>
+              <span>4.2s latency</span>
+            </div>
+          </div>
+          <div class="tool-card">
+            <div class="tool-card-header">
+              <div class="tool-icon queue">◷</div>
+              <div class="tool-name">Message Queue</div>
+            </div>
+            <div class="tool-status">
+              <span class="status-dot"></span>
+              <span class="status-text healthy">Connected</span>
+            </div>
+            <div class="tool-meta">
+              <span>✓ 1.2K messages/min</span>
+              <span>0.8s latency</span>
+            </div>
+          </div>
+          <div class="tool-card">
+            <div class="tool-card-header">
+              <div class="tool-icon scheduler">▶</div>
+              <div class="tool-name">Scheduler</div>
+            </div>
+            <div class="tool-status">
+              <span class="status-dot"></span>
+              <span class="status-text">Running</span>
+            </div>
+            <div class="tool-meta">
+              <span>✓ Jobs active</span>
+              <span>Last run: 08:20 AM</span>
+            </div>
+          </div>
+          <div class="tool-card">
+            <div class="tool-card-header">
+              <div class="tool-icon files">📁</div>
+              <div class="tool-name">File Server</div>
+            </div>
+            <div class="tool-status">
+              <span class="status-dot"></span>
+              <span class="status-text healthy">Connected</span>
+            </div>
+            <div class="tool-meta">
+              <span>✓ 842GB used</span>
+              <span>Current: 128GB</span>
+            </div>
+          </div>
+          <div class="tool-card">
+            <div class="tool-card-header">
+              <div class="tool-icon api">{ }</div>
+              <div class="tool-name">APIs</div>
+            </div>
+            <div class="tool-status">
+              <span class="status-dot"></span>
+              <span class="status-text healthy">Healthy</span>
+            </div>
+            <div class="tool-meta">
+              <span>✓ 34 endpoints</span>
+              <span>99.8% uptime</span>
+            </div>
+          </div>
+          <div class="tool-card">
+            <div class="tool-card-header">
+              <div class="tool-icon env">⚙</div>
+              <div class="tool-name">Environment</div>
+            </div>
+            <div class="tool-status">
+              <span class="status-dot"></span>
+              <span class="status-text healthy">Healthy</span>
+            </div>
+            <div class="tool-meta">
+              <span>✓ Staging ready</span>
+              <span>6/6 services</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+
       <div class="dashboard-grid">
 
         <!-- TODAY TASKS -->
@@ -235,22 +330,6 @@
               <strong>Run data quality checks</strong>
               <span class="priority medium">Medium</span>
               <span>Today</span>
-              <span class="task-status">Not Started</span>
-            </div>
-
-            <div class="task-row">
-              <span>T-104</span>
-              <strong>Reconcile target counts</strong>
-              <span class="priority medium">Medium</span>
-              <span>Tomorrow</span>
-              <span class="task-status">Not Started</span>
-            </div>
-
-            <div class="task-row">
-              <span>T-105</span>
-              <strong>Update project runbook</strong>
-              <span class="priority low">Low</span>
-              <span>Tomorrow</span>
               <span class="task-status">Not Started</span>
             </div>
 
@@ -311,10 +390,34 @@
           </div>
 
           <div class="activity-list">
-            <p>Data load job completed successfully <span>8:45 AM</span></p>
-            <p>Connected to message queue <span>8:12 AM</span></p>
-            <p>Validated incoming sample file <span>7:58 AM</span></p>
-            <p>Tom updated project knowledge <span>7:30 AM</span></p>
+            <div class="activity-item">
+              <div class="activity-time">8:45 AM</div>
+              <div class="activity-content">
+                <div class="activity-action">Data load job completed <span class="activity-badge success">Success</span></div>
+                <div class="activity-detail">All records migrated successfully</div>
+              </div>
+            </div>
+            <div class="activity-item">
+              <div class="activity-time">8:12 AM</div>
+              <div class="activity-content">
+                <div class="activity-action">Connected to message queue <span class="activity-badge info">Connected</span></div>
+                <div class="activity-detail">Established stable connection</div>
+              </div>
+            </div>
+            <div class="activity-item">
+              <div class="activity-time">7:58 AM</div>
+              <div class="activity-content">
+                <div class="activity-action">Validated incoming sample file <span class="activity-badge info">OK</span></div>
+                <div class="activity-detail">Schema validation passed</div>
+              </div>
+            </div>
+            <div class="activity-item">
+              <div class="activity-time">7:30 AM</div>
+              <div class="activity-content">
+                <div class="activity-action">Tom updated project knowledge</div>
+                <div class="activity-detail">Added new migration procedures</div>
+              </div>
+            </div>
           </div>
 
         </section>
@@ -328,11 +431,35 @@
             <button class="text-button">View All</button>
           </div>
 
-          <div class="knowledge-list">
-            <button>Migration Process Guide</button>
-            <button>File Format Specifications</button>
-            <button>Error Handling Guide</button>
-            <button>Data Quality Rules</button>
+          <div class="knowledge-grid">
+            <div class="knowledge-item">
+              <div class="knowledge-item-header">
+                <div class="knowledge-icon docs">📚</div>
+                <div class="knowledge-title">Migration Guide</div>
+              </div>
+              <div class="knowledge-desc">Complete migration process documentation</div>
+            </div>
+            <div class="knowledge-item">
+              <div class="knowledge-item-header">
+                <div class="knowledge-icon specs">📄</div>
+                <div class="knowledge-title">File Specs</div>
+              </div>
+              <div class="knowledge-desc">Data format and schema specifications</div>
+            </div>
+            <div class="knowledge-item">
+              <div class="knowledge-item-header">
+                <div class="knowledge-icon errors">⚠</div>
+                <div class="knowledge-title">Error Handling</div>
+              </div>
+              <div class="knowledge-desc">Common issues and resolution procedures</div>
+            </div>
+            <div class="knowledge-item">
+              <div class="knowledge-item-header">
+                <div class="knowledge-icon rules">✓</div>
+                <div class="knowledge-title">Quality Rules</div>
+              </div>
+              <div class="knowledge-desc">Data validation and quality standards</div>
+            </div>
           </div>
 
         </section>
@@ -349,8 +476,67 @@
     </section>
 
     <section id="workspace" class="page">
-      <h1>Workspace</h1>
-      <p>Connections, applications, environments and health.</p>
+
+      <div class="page-heading">
+        <div>
+          <h1>Workspace</h1>
+          <p>Authorized project files and source inspection.</p>
+        </div>
+        <div class="shift-status">
+          <strong id="workspaceStatus">Loading</strong>
+          <span id="workspaceStatusDetail">Reading project…</span>
+        </div>
+      </div>
+
+      <!-- PROJECT SUMMARY -->
+      <section class="card workspace-summary-card">
+        <div class="card-header">
+          <div>
+            <h2 id="workspaceProjectName">Project Workspace</h2>
+            <p id="workspaceProjectPath">Resolving authorized project root…</p>
+          </div>
+          <div class="workspace-summary-meta">
+            <div class="workspace-stat">
+              <strong id="workspaceFileCount">—</strong>
+              <span>Total files</span>
+            </div>
+            <button id="workspaceRefresh" class="text-button" type="button">Refresh</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- FILE EXPLORER + VIEWER -->
+      <div class="workspace-layout">
+
+        <section class="card workspace-explorer-card">
+          <div class="card-header">
+            <h2>Files</h2>
+            <span class="workspace-explorer-count" id="workspaceExplorerCount"></span>
+          </div>
+
+          <div class="workspace-explorer" id="workspaceExplorer" role="tree" aria-label="Project files">
+            <div class="workspace-state">Loading project files…</div>
+          </div>
+        </section>
+
+        <section class="card workspace-viewer-card">
+          <div class="card-header">
+            <div class="workspace-viewer-heading">
+              <h2 id="workspaceFileName">No file selected</h2>
+              <p id="workspaceFilePath">Select a file from the explorer to view its contents.</p>
+            </div>
+            <button id="workspaceAskTom" class="primary-button" type="button" disabled>
+              Ask Tom about this file
+            </button>
+          </div>
+
+          <div class="workspace-viewer" id="workspaceViewer">
+            <div class="workspace-state">No file selected.</div>
+          </div>
+        </section>
+
+      </div>
+
     </section>
 
     <section id="incidents" class="page">

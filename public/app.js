@@ -527,3 +527,357 @@ if (document.readyState === "loading") {
 } else {
   initTomPanel();
 }
+
+
+// ---------------------------------------
+// WORKSPACE PAGE
+// ---------------------------------------
+// Loads the authorized project from GET /project,
+// renders a file explorer from the returned entries,
+// and reads files through GET /file?path=.
+// "Ask Tom about this file" reuses the existing
+// Tom conversation UI and POST /analyze-file.
+
+const workspaceExplorer = document.getElementById("workspaceExplorer");
+const workspaceViewer = document.getElementById("workspaceViewer");
+const workspaceProjectName = document.getElementById("workspaceProjectName");
+const workspaceProjectPath = document.getElementById("workspaceProjectPath");
+const workspaceFileCount = document.getElementById("workspaceFileCount");
+const workspaceExplorerCount = document.getElementById("workspaceExplorerCount");
+const workspaceFileName = document.getElementById("workspaceFileName");
+const workspaceFilePath = document.getElementById("workspaceFilePath");
+const workspaceAskTom = document.getElementById("workspaceAskTom");
+const workspaceRefresh = document.getElementById("workspaceRefresh");
+const workspaceStatus = document.getElementById("workspaceStatus");
+const workspaceStatusDetail = document.getElementById("workspaceStatusDetail");
+
+let workspaceLoaded = false;
+let selectedWorkspaceFile = null;
+
+function setWorkspaceStatus(label, detail, state) {
+  if (workspaceStatus) {
+    workspaceStatus.textContent = label;
+
+    if (state === "error") {
+      workspaceStatus.style.color = "var(--danger)";
+    } else if (state === "loading") {
+      workspaceStatus.style.color = "#3266a8";
+    } else {
+      workspaceStatus.style.color = "var(--success)";
+    }
+  }
+
+  if (workspaceStatusDetail) {
+    workspaceStatusDetail.textContent = detail;
+  }
+}
+
+function showWorkspaceState(container, message, stateClass) {
+  if (!container) return;
+
+  container.innerHTML = "";
+
+  const state = document.createElement("div");
+  state.className = "workspace-state" + (stateClass ? " " + stateClass : "");
+  state.textContent = message;
+
+  container.appendChild(state);
+}
+
+// Render the explorer using ONLY entries returned by /project.
+function renderWorkspaceExplorer(files) {
+  if (!workspaceExplorer) return;
+
+  workspaceExplorer.innerHTML = "";
+
+  if (!files || files.length === 0) {
+    showWorkspaceState(
+      workspaceExplorer,
+      "This project has no files to display.",
+      ""
+    );
+    return;
+  }
+
+  files.forEach((entry) => {
+    const isFolder = entry.type === "folder";
+
+    // Folders are shown but not selectable, because /project
+    // only returns top-level entries (no nested contents).
+    const node = document.createElement(isFolder ? "div" : "button");
+
+    node.className =
+      "workspace-node " + (isFolder ? "folder" : "file");
+
+    if (!isFolder) {
+      node.type = "button";
+    }
+
+    const icon = document.createElement("span");
+    icon.className = "workspace-node-icon";
+    icon.textContent = isFolder ? "📁" : "📄";
+
+    const name = document.createElement("span");
+    name.className = "workspace-node-name";
+    name.textContent = entry.name;
+
+    node.appendChild(icon);
+    node.appendChild(name);
+
+    if (!isFolder) {
+      node.addEventListener("click", () => {
+        openWorkspaceFile(entry.name, node);
+      });
+    }
+
+    workspaceExplorer.appendChild(node);
+  });
+}
+
+// Read a file through the existing GET /file endpoint.
+async function openWorkspaceFile(fileName, node) {
+  selectedWorkspaceFile = fileName;
+
+  if (workspaceExplorer) {
+    workspaceExplorer
+      .querySelectorAll(".workspace-node")
+      .forEach((n) => n.classList.remove("selected"));
+  }
+
+  if (node) {
+    node.classList.add("selected");
+  }
+
+  if (workspaceFileName) {
+    workspaceFileName.textContent = fileName;
+  }
+
+  if (workspaceFilePath) {
+    workspaceFilePath.textContent = fileName;
+  }
+
+  if (workspaceAskTom) {
+    workspaceAskTom.disabled = true;
+  }
+
+  showWorkspaceState(workspaceViewer, "Loading file…", "loading");
+
+  try {
+    const response = await fetch(
+      "/file?path=" + encodeURIComponent(fileName)
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Unable to read file");
+    }
+
+    // Preserve whitespace exactly using a <pre> element.
+    workspaceViewer.innerHTML = "";
+
+    const pre = document.createElement("pre");
+    pre.className = "workspace-code";
+    pre.textContent = data.content != null ? data.content : "";
+
+    workspaceViewer.appendChild(pre);
+
+    if (workspaceAskTom) {
+      workspaceAskTom.disabled = false;
+    }
+
+  } catch (error) {
+    showWorkspaceState(
+      workspaceViewer,
+      "Could not read file: " + error.message,
+      "error"
+    );
+
+    if (workspaceAskTom) {
+      workspaceAskTom.disabled = true;
+    }
+  }
+}
+
+// Load the authorized project from GET /project.
+async function loadWorkspace() {
+  workspaceLoaded = true;
+
+  setWorkspaceStatus("Loading", "Reading project…", "loading");
+
+  showWorkspaceState(
+    workspaceExplorer,
+    "Loading project files…",
+    "loading"
+  );
+
+  if (workspaceFileCount) {
+    workspaceFileCount.textContent = "—";
+  }
+
+  if (workspaceExplorerCount) {
+    workspaceExplorerCount.textContent = "";
+  }
+
+  try {
+    const response = await fetch("/project");
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Unable to load project");
+    }
+
+    const files = Array.isArray(data.files) ? data.files : [];
+
+    if (workspaceProjectName) {
+      workspaceProjectName.textContent =
+        data.project || "Project Workspace";
+    }
+
+    if (workspaceProjectPath) {
+      workspaceProjectPath.textContent =
+        data.root || "Unknown project root";
+    }
+
+    const fileCount = files.filter(
+      (entry) => entry.type === "file"
+    ).length;
+
+    if (workspaceFileCount) {
+      workspaceFileCount.textContent = String(fileCount);
+    }
+
+    if (workspaceExplorerCount) {
+      workspaceExplorerCount.textContent =
+        files.length + " entries";
+    }
+
+    renderWorkspaceExplorer(files);
+
+    setWorkspaceStatus("Ready", "Project loaded", "ok");
+
+  } catch (error) {
+    showWorkspaceState(
+      workspaceExplorer,
+      "Could not load project: " + error.message,
+      "error"
+    );
+
+    setWorkspaceStatus("Error", "Project unavailable", "error");
+  }
+}
+
+// Reuse the existing Tom conversation UI + POST /analyze-file.
+async function askTomAboutFile() {
+  if (!selectedWorkspaceFile) return;
+
+  // Make sure the existing Tom panel is visible.
+  if (collapsed) {
+    togglePanel();
+  }
+
+  const question =
+    "Explain what this file does, its key responsibilities, " +
+    "and anything important to know about it.";
+
+  let conv = getActiveConversation();
+
+  if (!conv) {
+    conv = createConversation(
+      "Analyze " + selectedWorkspaceFile
+    );
+  }
+
+  const userMsg = {
+    role: "user",
+    content:
+      "Ask Tom about this file: " + selectedWorkspaceFile,
+    timestamp: new Date().toISOString()
+  };
+
+  conv.messages.push(userMsg);
+  saveConversations();
+  renderMessages(conv.messages);
+  renderHistory();
+
+  responseDisplay.textContent =
+    "Tom is analyzing " + selectedWorkspaceFile + "…";
+
+  try {
+    const response = await fetch("/analyze-file", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        path: selectedWorkspaceFile,
+        question: question
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.error || "Tom file analysis failed"
+      );
+    }
+
+    const tomMsg = {
+      role: "tom",
+      content: data.reply || "Tom returned no response.",
+      timestamp: new Date().toISOString()
+    };
+
+    conv.messages.push(tomMsg);
+    saveConversations();
+    renderMessages(conv.messages);
+    renderHistory();
+
+  } catch (error) {
+    const errorMsg = {
+      role: "tom",
+      content:
+        "Tom file analysis error: " + error.message,
+      timestamp: new Date().toISOString()
+    };
+
+    conv.messages.push(errorMsg);
+    saveConversations();
+    renderMessages(conv.messages);
+    renderHistory();
+
+  } finally {
+    updateInputState(true);
+  }
+}
+
+// Wire up Workspace controls.
+if (workspaceRefresh) {
+  workspaceRefresh.addEventListener("click", loadWorkspace);
+}
+
+if (workspaceAskTom) {
+  workspaceAskTom.addEventListener("click", askTomAboutFile);
+}
+
+// Load the project the first time the Workspace page is opened.
+const workspaceNavButton = document.querySelector(
+  '.nav-item[data-page="workspace"]'
+);
+
+if (workspaceNavButton) {
+  workspaceNavButton.addEventListener("click", () => {
+    if (!workspaceLoaded) {
+      loadWorkspace();
+    }
+  });
+}
+
+// If the Workspace page is already active on load, populate it.
+if (
+  document.getElementById("workspace") &&
+  document.getElementById("workspace").classList.contains("active")
+) {
+  loadWorkspace();
+}
