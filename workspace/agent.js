@@ -13,6 +13,7 @@ const BLOCKED_NAMES = new Set([
   ".env.development",
   ".env.production",
   ".git",
+  "web-git-backup",
   ".vercel",
   "node_modules",
   ".next",
@@ -227,6 +228,17 @@ function readProjectFile(relativePath) {
     throw new Error(
       "Requested file does not exist"
     );
+  }
+
+  // SECURITY: resolve symlinks and re-check containment so a symlink
+  // inside the project cannot be used to read files outside DROP_ROOT.
+  const realPath = fs.realpathSync(resolvedFile);
+  const resolvedRoot = path.resolve(DROP_ROOT);
+  if (
+    realPath !== resolvedRoot &&
+    !realPath.startsWith(resolvedRoot + path.sep)
+  ) {
+    throw new Error("Access outside DROP project is blocked");
   }
 
   const stats = fs.statSync(resolvedFile);
@@ -609,25 +621,43 @@ function writeProjectFile(relativePath, content) {
   try {
     // Validate path using existing read security (reuse validateProjectPath)
     const resolvedFile = validateProjectPath(relativePath);
-    
-    // Additional checks for writing
-    const stats = fs.existsSync(resolvedFile) ? fs.statSync(resolvedFile) : null;
-    
+
+    // Use lstat (does not follow symlinks) so a symlink target itself is
+    // detected rather than silently followed.
+    let lstat = null;
+    try {
+      lstat = fs.lstatSync(resolvedFile);
+    } catch (e) {
+      lstat = null;
+    }
+
     // Prevent writing to directories
-    if (stats && stats.isDirectory()) {
+    if (lstat && lstat.isDirectory()) {
       throw new Error("Cannot write to a directory");
     }
-    
+
+    // Prevent writing to (or through) a symbolic link.
+    if (lstat && lstat.isSymbolicLink()) {
+      throw new Error("Cannot write to a symbolic link");
+    }
+
+    // SECURITY: if the parent directory is (or contains) a symlink that
+    // resolves outside DROP_ROOT, refuse the write even though the target
+    // file itself may not exist yet.
+    const parentDir = path.dirname(resolvedFile);
+    if (fs.existsSync(parentDir)) {
+      const realParent = fs.realpathSync(parentDir);
+      const resolvedRoot = path.resolve(DROP_ROOT);
+      if (realParent !== resolvedRoot && !realParent.startsWith(resolvedRoot + path.sep)) {
+        throw new Error("Access outside DROP project is blocked");
+      }
+    }
+
     // Check content size
     if (Buffer.byteLength(content, "utf8") > MAX_OUTPUT_SIZE) {
       throw new Error(`Content exceeds maximum write size of ${MAX_OUTPUT_SIZE} bytes`);
     }
-    
-    // Prevent writing symlinks (though validateProjectPath should catch this via traversal)
-    if (stats && stats.isSymbolicLink()) {
-      throw new Error("Cannot write to a symbolic link");
-    }
-    
+
     // Atomic write using temp file
     const tempFile = resolvedFile + ".tmp." + Date.now() + "." + Math.random().toString(36).substr(2, 9);
     

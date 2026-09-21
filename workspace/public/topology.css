@@ -1,0 +1,78 @@
+#topology { --topo-bg: #101923; --topo-surface: #182431; --topo-line: #304050; --topo-muted: #a0b0c1; min-width: 0; }
+#topology * { box-sizing: border-box; }
+#topology [hidden] { display: none !important; }
+#topology button, #topology input { font: inherit; }
+#topology button { cursor: pointer; }
+#topology button:focus-visible, #topology input:focus-visible { outline: 2px solid #69b9e2; outline-offset: 3px; }
+.topo-header { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+.topo-header h1 { font-size: 23px; margin: 5px 0; letter-spacing: -.5px; }
+.topo-header p { margin: 0; color: #687785; font-size: 12px; }
+.topo-eyebrow { font-size: 9px; letter-spacing: 1.8px; color: #7e95a8; font-weight: 700; }
+.topo-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+.topo-toolbar button, .topo-toolbar input { border: 1px solid #ccd3da; border-radius: 5px; padding: 9px 11px; background: #fff; color: #263644; font-size: 11px !important; }
+.topo-toolbar input { width: 205px; max-width: 100%; }
+#topoAdd { background: #243d51; color: white; border-color: #243d51; }
+.topo-filters { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 12px; }
+.topo-filters button { border: 1px solid transparent; border-radius: 5px; background: transparent; padding: 6px 10px; color: #617181; font-size: 11px !important; }
+.topo-filters button[aria-pressed="true"] { background: #e4ebf0; border-color: #cad5df; color: #223748; }
+.topo-workspace { display: flex; position: relative; min-width: 0; border: 1px solid var(--topo-line); border-radius: 8px; overflow: hidden; background: var(--topo-bg); color: #e5edf4; }
+.topo-canvas { flex: 1; min-width: 0; height: 520px; position: relative; overflow: hidden; touch-action: none; background-image: radial-gradient(#344353 1px, transparent 1px); background-size: 20px 20px; cursor: grab; }
+.topo-canvas:active { cursor: grabbing; }
+.topo-world { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
+#topoEdges { position: absolute; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
+#topoEdges path { fill: none; stroke: var(--state-color, #7d8996); stroke-width: 2; }
+#topoEdges text { fill: #b7c6d5; font-size: 10px; text-anchor: middle; paint-order: stroke; stroke: #101923; stroke-width: 5px; stroke-linejoin: round; }
+#topoEdges .state-warning path { stroke-dasharray: 7 5; }
+#topoEdges .state-working path { stroke-dasharray: 3 8; animation: topo-flow 1s linear infinite; }
+@keyframes topo-flow { to { stroke-dashoffset: -22; } }
+#topology .state-connected { --state-color: #68c89b; }
+#topology .state-working { --state-color: #61c4e5; }
+#topology .state-warning { --state-color: #e7bc67; }
+#topology .state-error { --state-color: #ec8686; }
+#topology .state-not_connected, #topology .state-unknown, #topology .state-disabled { --state-color: #9aa8b5; }
+.topo-node { position: absolute; width: 220px; min-height: 84px; display: flex; align-items: center; gap: 11px; padding: 14px; border: 1px solid #3b4d5e; border-radius: 7px; background: #1b2937; color: #e5edf4; text-align: left; box-shadow: 0 3px 8px #0002; user-select: none; touch-action: none; }
+.topo-node:hover { border-color: #7e95a8; }
+.topo-node.selected { border-color: #8bc6e6; box-shadow: 0 0 0 2px #8bc6e626; }
+.topo-node.state-disabled { opacity: .55; }
+.topo-icon { width: 32px; height: 32px; flex: 0 0 32px; display: grid; place-items: center; border-radius: 6px; background: #dfe7ed; color: #263644; }
+.topo-icon img { width: 21px; height: 21px; }
+.topo-node-copy { display: grid; gap: 4px; min-width: 0; }
+.topo-node-copy strong { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topo-node-copy > span { font-size: 10px; color: #adbdcb; text-transform: capitalize; }
+.topo-node-copy small { font-size: 9px; color: var(--state-color, #afc0ce); }
+.topo-node:not(.topo-project) small::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--state-color); margin-right: 5px; }
+.topo-project { background: #22384a; border-color: #6e8da4; }
+.topo-project .topo-icon { background: #304d63; color: #ecf4fa; border: 1px solid #7994a8; font-size: 23px; font-weight: 800; border-radius: 10px 3px 10px 3px; }
+.topo-project strong { letter-spacing: 3px; font-size: 13px; }
+.topo-unverified { position: absolute; left: 45px; top: 377px; width: 790px; padding: 12px 18px; border-top: 1px dashed #405164; color: #9aabba; font-size: 11px; pointer-events: none; }
+.topo-canvas-caption { position: absolute; top: 15px; left: 16px; color: #9cadbe; font-size: 10px; pointer-events: none; }
+.topo-controls { position: absolute; bottom: 14px; left: 14px; display: flex; align-items: center; gap: 3px; padding: 3px; border: 1px solid #394c5e; background: #172432; border-radius: 6px; }
+.topo-controls button { border: 0; background: transparent; color: #dce8f1; padding: 7px 10px; font-size: 11px !important; }
+.topo-controls span { color: #a5b8ca; font-size: 10px; width: 35px; text-align: center; }
+.topo-empty { position: absolute; bottom: 75px; left: 20px; right: 20px; text-align: center; color: #a5b6c7; font-size: 12px; pointer-events: none; }
+.topo-panel { width: 315px; flex: 0 0 315px; min-width: 0; max-height: 520px; overflow: auto; padding: 19px 16px; background: #182431; border-left: 1px solid #354757; }
+.topo-panel h2 { font-size: 18px; margin: 8px 0; }
+.topo-panel p { font-size: 11px; color: #aebdcb; line-height: 1.65; overflow-wrap: anywhere; white-space: pre-line; }
+.topo-close { float: right; background: transparent; border: 0; color: #c5d1dc; font-size: 22px !important; }
+.topo-tabs { display: flex; flex-wrap: wrap; gap: 2px; border-bottom: 1px solid #354757; margin: 18px 0; }
+.topo-tabs button { background: transparent; border: 0; border-bottom: 2px solid transparent; color: #97aabc; padding: 8px 5px; font-size: 10px !important; }
+.topo-tabs button[aria-selected="true"] { color: #e3eef7; border-bottom-color: #8eb7d2; }
+.topo-panel h3 { margin: 15px 0 3px; color: #cedae5; font-size: 10px; font-weight: 600; }
+.topo-panel-body p { margin: 0; }
+.topo-details { margin-top: 20px; width: 100%; border: 1px solid #546e84; border-radius: 5px; padding: 10px; background: #23394a; color: #dae7f2; font-size: 11px !important; }
+.topo-meta { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 9px 0 16px; font-size: 10px; color: #687b8c; min-height: 14px; }
+.topo-bottom { display: grid; grid-template-columns: 1fr 1.3fr 1fr 1fr; gap: 12px; }
+.topo-bottom > section { min-width: 0; border: 1px solid #dbe2e8; border-radius: 6px; padding: 14px; background: #fff; }
+.topo-bottom h2 { font-size: 11px; margin: 0 0 13px; color: #33495b; }
+.topo-bottom p, #topoActivity, #topoAlerts { font-size: 10px; color: #667a8b; line-height: 1.6; margin: 0; max-height: 130px; overflow: auto; }
+.topo-legend { display: flex; flex-wrap: wrap; gap: 10px 12px; font-size: 10px; color: #617587; }
+.topo-legend span::before { content: ''; display: inline-block; width: 16px; border-top: 2px solid var(--state-color); margin: 0 5px 3px 0; }
+.topo-legend .state-working::before, .topo-legend .state-warning::before { border-top-style: dashed; }
+.topo-health { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px 6px; }
+.topo-health div { display: grid; gap: 4px; }
+.topo-health strong { font-size: 17px; color: #33495b; }
+.topo-health span { font-size: 9px; color: #627687; }
+@media (max-width: 1200px) { .topo-bottom { grid-template-columns: 1fr 1fr; } .topo-panel { width: 275px; flex-basis: 275px; } }
+@media (max-width: 700px) { .topo-toolbar { width: 100%; } .topo-toolbar input { width: 100%; } .topo-toolbar button { flex: 1; padding: 9px 6px; } .topo-canvas { height: 470px; } .topo-panel { position: absolute; right: 0; top: 0; bottom: 0; width: min(315px, 100%); max-height: none; z-index: 5; box-shadow: -8px 0 20px #0004; } .topo-bottom { grid-template-columns: 1fr; } .topo-filters button { padding: 6px 7px; } }
+@media (prefers-reduced-motion: reduce) { #topoEdges .state-working path { animation: none; } }
+.topo-panel h2 { display: flex; align-items: center; gap: 10px; }

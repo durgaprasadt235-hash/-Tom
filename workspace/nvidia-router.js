@@ -8,7 +8,7 @@ const MODELS = [
   "openai/gpt-oss-20b"
 ];
 
-async function askNvidia(messages) {
+async function askNvidia(messages, options = {}) {
   const apiKey = process.env.NVIDIA_API_KEY;
 
   if (!apiKey) throw new Error("NVIDIA_API_KEY is not set");
@@ -23,10 +23,14 @@ async function askNvidia(messages) {
             Authorization: `Bearer ${apiKey}`,
             "Content-Type": "application/json"
           },
+          // Ask reasoning-capable models (e.g. nemotron) to skip emitting a
+          // visible thinking trace. Unsupported models ignore this field.
           body: JSON.stringify({
             model,
             messages,
-            max_tokens: 1000
+            max_tokens: 1000,
+            chat_template_kwargs: { thinking: false },
+            ...(typeof options.temperature === "number" ? { temperature: options.temperature } : {})
           })
         }
       );

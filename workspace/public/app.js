@@ -515,7 +515,8 @@ function loadConversation(conv) {
 // user | tom | system
 function displayRole(role) {
   if (role === "user") return "user";
-  if (role === "system" || role === "tool") return "system";
+  if (role === "tool") return "tool";
+  if (role === "system") return "system";
   return "tom";
 }
 
@@ -581,7 +582,7 @@ function renderMessages(messages) {
     msgDiv.className = `tom-message ${role}`;
 
     // Only live chat turns announce; system/tool notes stay quiet.
-    if (role !== "system") {
+    if (role === "user" || role === "tom") {
       msgDiv.setAttribute("role", "alert");
     }
 
@@ -666,12 +667,14 @@ async function sendMessage() {
   sendButton.disabled = true;
   responseDisplay.textContent = "Tom is thinking...";
 
-  // Build history to send: all messages before the one we just added
-  // (the history Tom needs to recall the conversation)
-  const historyForServer = conv.messages.slice(0, -1).map(m => ({
-    role: m.role === "tom" ? "assistant" : m.role,
-    content: m.content
-  }));
+  // Build history to send: all messages before the one we just added.
+  // Tool/system activity is display-only and never sent to the model.
+  const historyForServer = conv.messages.slice(0, -1)
+    .filter(m => m.role === "user" || m.role === "tom")
+    .map(m => ({
+      role: m.role === "tom" ? "assistant" : m.role,
+      content: m.content
+    }));
 
   try {
     const response = await fetch("/chat", {
@@ -689,6 +692,22 @@ async function sendMessage() {
 
     if (!response.ok) {
       throw new Error(data.error || "Tom request failed");
+    }
+
+      // Compact tool activity (e.g. "Checking Git status...").
+    // Displayed in the conversation, but excluded from model history.
+    const activity = Array.isArray(data.toolActivity)
+      ? data.toolActivity
+      : [];
+
+    if (activity.length > 0) {
+      activity.forEach((label) => {
+        conv.messages.push({
+          role: "tool",
+          content: label,
+          timestamp: new Date().toISOString()
+        });
+      });
     }
 
     const tomReply = data.reply || "Tom returned no response.";
@@ -1480,3 +1499,601 @@ if (
 ) {
   loadWorkspace();
 }
+
+
+// ---------------------------------------
+// PLUGIN MARKETPLACE
+// ---------------------------------------
+
+const marketplacePage = document.getElementById("marketplace");
+let marketplaceAllPlugins = [];
+let marketplaceFiltered = [];
+
+const marketplaceSearchInput = document.getElementById("marketplaceSearch");
+const marketplaceCategorySelect = document.getElementById("marketplaceCategory");
+const marketplaceGrid = document.getElementById("marketplaceGrid");
+const installedGrid = document.getElementById("installedGrid");
+const installedSummary = document.getElementById("installedSummary");
+const topologyCanvas = document.getElementById("topologyCanvas");
+
+const PROJECT_ID = "drop";
+
+// Billing mode display labels
+const BILLING_LABELS = {
+  included: "Included",
+  tom_metered: "Tom Metered",
+  vendor_billed: "Vendor Billed",
+  enterprise_license: "Enterprise License",
+  bring_your_own_account: "BYO Account"
+};
+
+async function loadMarketplace() {
+  if (!marketplaceGrid) return;
+
+  marketplaceGrid.innerHTML = '<div class="marketplace-loading">Loading catalog...</div>';
+
+  try {
+    const response = await fetch("/plugins");
+    if (!response.ok) throw new Error("Failed to load catalog");
+
+    marketplaceAllPlugins = await response.json();
+
+    // Load categories
+    const catResponse = await fetch("/plugins/categories");
+    const categories = catResponse.ok ? await catResponse.json() : [];
+
+    // Populate category dropdown
+    if (marketplaceCategorySelect) {
+      categories.forEach(cat => {
+        const opt = document.createElement("option");
+        opt.value = cat;
+        opt.textContent = cat.charAt(0).toUpperCase() + cat.slice(1);
+        marketplaceCategorySelect.appendChild(opt);
+      });
+    }
+
+    // Load install state for current project
+    try {
+      const installResp = await fetch(`/projects/${PROJECT_ID}/plugins`);
+      if (installResp.ok) {
+        const installData = await installResp.json();
+        const installMap = {};
+        installData.forEach(p => { installMap[p.id] = p; });
+        marketplaceAllPlugins = marketplaceAllPlugins.map(p => {
+          if (installMap[p.id]) {
+            return { ...p, installed: true, enabled: installMap[p.id].enabled, status: installMap[p.id].status };
+          }
+          return { ...p, installed: false, enabled: false, status: "available" };
+        });
+
+        const installedPlugins = marketplaceAllPlugins.filter(plugin => plugin.installed);
+        const statusResults = await Promise.all(installedPlugins.map(async plugin => {
+          const statusResponse = await fetch(`/projects/${PROJECT_ID}/plugins/${plugin.id}/status`);
+          return statusResponse.ok ? statusResponse.json() : null;
+        }));
+        statusResults.filter(Boolean).forEach(status => {
+          const plugin = marketplaceAllPlugins.find(item => item.id === status.id);
+          if (plugin) Object.assign(plugin, {
+            installed: status.installed,
+            enabled: status.enabled,
+            status: status.status
+          });
+        });
+      }
+    } catch (e) { /* Ignore */ }
+
+    marketplaceFiltered = [...marketplaceAllPlugins];
+    renderMarketplacePlugins();
+    refreshProjectPluginViews();
+  } catch (error) {
+    marketplaceGrid.innerHTML = `<div class="marketplace-error">Failed to load catalog: ${error.message}</div>`;
+  }
+}
+
+function renderMarketplacePlugins() {
+  if (!marketplaceGrid) return;
+
+  if (marketplaceFiltered.length === 0) {
+    marketplaceGrid.innerHTML = '<div class="marketplace-empty">No plugins found matching your search.</div>';
+    return;
+  }
+
+  marketplaceGrid.innerHTML = "";
+  marketplaceFiltered.forEach(plugin => {
+    const card = createPluginCard(plugin);
+    marketplaceGrid.appendChild(card);
+  });
+}
+
+// Brand assets are centralized so manifests remain metadata-only.
+const MARKETPLACE_BRAND_ASSETS = {
+  vscode: "https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/visualstudiocode.svg",
+  visualstudio: "https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/visualstudio.svg",
+  intellij: "https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/intellijidea.svg",
+  pycharm: "https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/pycharm.svg",
+  webstorm: "https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/webstorm.svg",
+  git: "https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/git.svg",
+  github: "https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/github.svg",
+  gitlab: "https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/gitlab.svg",
+  bitbucket: "https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/bitbucket.svg",
+  jira: "https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/jira.svg",
+  aws: "https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/amazonaws.svg",
+  azure: "https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/microsoftazure.svg",
+  databricks: "https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/databricks.svg",
+  postgresql: "https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/postgresql.svg",
+  docker: "https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/docker.svg",
+  kubernetes: "https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/kubernetes.svg",
+  slack: "https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/slack.svg"
+};
+
+function renderPluginIcon(container, plugin, size = "compact") {
+  container.replaceChildren();
+  container.classList.add(`plugin-icon-${size}`);
+
+  const assetUrl = MARKETPLACE_BRAND_ASSETS[plugin.id];
+  if (assetUrl) {
+    const image = document.createElement("img");
+    image.src = assetUrl;
+    image.alt = "";
+    image.loading = "lazy";
+    image.addEventListener("error", () => {
+      image.replaceWith(createFallbackIcon());
+    }, { once: true });
+    container.appendChild(image);
+    return;
+  }
+
+  container.appendChild(createFallbackIcon());
+}
+
+function createFallbackIcon() {
+  const fallback = document.createElement("span");
+  fallback.className = "tom-icon-fallback";
+  fallback.textContent = "T";
+  fallback.setAttribute("aria-hidden", "true");
+  return fallback;
+}
+
+function createPluginCard(plugin) {
+  const card = document.createElement("div");
+  card.className = "marketplace-card compact";
+  card.dataset.pluginId = plugin.id;
+
+  // Compact view: only icon and name, with optional installed indicator
+  let installedIndicator = "";
+  if (plugin.installed) {
+    installedIndicator = `<span class="installed-indicator" title="Installed">&#10003;</span>`;
+  }
+
+  const content = document.createElement("div");
+  content.className = "marketplace-card-content";
+
+  const icon = document.createElement("span");
+  icon.className = "marketplace-icon";
+  renderPluginIcon(icon, plugin);
+  content.appendChild(icon);
+
+  const name = document.createElement("span");
+  name.className = "marketplace-name";
+  const nameText = document.createElement("strong");
+  nameText.textContent = plugin.name;
+  name.appendChild(nameText);
+  if (installedIndicator) {
+    const indicator = document.createElement("span");
+    indicator.className = "installed-indicator";
+    indicator.title = "Installed";
+    indicator.textContent = "✓";
+    name.appendChild(indicator);
+  }
+  content.appendChild(name);
+  card.appendChild(content);
+
+  // Entire card is clickable to open detail view
+  card.addEventListener("click", () => showPluginDetail(plugin));
+
+  return card;
+}
+
+function getStatusClass(status) {
+  switch (status) {
+    case "connected": return "healthy";
+    case "available": return "neutral";
+    case "installed": return "healthy";
+    case "configuration_required": return "warning";
+    case "disconnected": return "warning";
+    case "degraded": return "warning";
+    case "disabled": return "neutral";
+    case "error": return "error";
+    default: return "neutral";
+  }
+}
+
+function getStatusLabel(status) {
+  return {
+    available: "Available",
+    installed: "Installed",
+    configuration_required: "Setup required",
+    connected: "Connected",
+    degraded: "Degraded",
+    disconnected: "Disconnected",
+    disabled: "Disabled",
+    error: "Error"
+  }[status] || status || "Unknown";
+}
+
+function getInstalledPlugins() {
+  return marketplaceAllPlugins.filter(plugin => plugin.installed === true);
+}
+
+function createStatusBadge(plugin) {
+  const status = document.createElement("span");
+  status.className = `plugin-status-badge ${getStatusClass(plugin.status)}`;
+  status.textContent = getStatusLabel(plugin.status);
+  return status;
+}
+
+function createInstalledCard(plugin) {
+  const card = document.createElement("article");
+  card.className = "installed-card";
+  card.dataset.pluginId = plugin.id;
+  card.tabIndex = 0;
+
+  const header = document.createElement("div");
+  header.className = "installed-card-header";
+  const icon = document.createElement("span");
+  icon.className = "marketplace-icon";
+  renderPluginIcon(icon, plugin);
+  header.appendChild(icon);
+
+  const copy = document.createElement("div");
+  copy.className = "installed-card-copy";
+  const name = document.createElement("strong");
+  name.textContent = plugin.name;
+  const vendor = document.createElement("span");
+  vendor.textContent = plugin.vendor || "Unknown vendor";
+  copy.append(name, vendor);
+  header.appendChild(copy);
+  header.appendChild(createStatusBadge(plugin));
+  card.appendChild(header);
+
+  const meta = document.createElement("div");
+  meta.className = "installed-card-meta";
+  meta.textContent = `${plugin.category || "Uncategorized"} · ${plugin.connectionType || "integration"}`;
+  card.appendChild(meta);
+
+  const openDetail = () => showPluginDetail(plugin);
+  card.addEventListener("click", openDetail);
+  card.addEventListener("keydown", event => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openDetail();
+    }
+  });
+  return card;
+}
+
+function renderInstalledView() {
+  if (!installedGrid) return;
+  const installed = getInstalledPlugins();
+  installedGrid.replaceChildren();
+  if (installedSummary) {
+    installedSummary.textContent = `${installed.length} installed integration${installed.length === 1 ? "" : "s"}`;
+  }
+  if (installed.length === 0) {
+    installedGrid.innerHTML = '<div class="marketplace-empty">No plugins are installed for this project.</div>';
+    return;
+  }
+  installed.forEach(plugin => installedGrid.appendChild(createInstalledCard(plugin)));
+}
+
+function renderTopologyView() {
+  window.TomTopology?.refresh();
+}
+
+function refreshProjectPluginViews() {
+  renderInstalledView();
+  renderTopologyView();
+}
+
+function handleMarketplaceSearch() {
+  const query = marketplaceSearchInput?.value || "";
+  const category = marketplaceCategorySelect?.value || "all";
+
+  if (query.trim() === "") {
+    marketplaceFiltered = [...marketplaceAllPlugins];
+  } else {
+    const lowerQuery = query.toLowerCase();
+    marketplaceFiltered = marketplaceAllPlugins.filter(p => {
+      const text = [p.name, p.description, p.vendor, p.category, ...(p.capabilities || []).map(c => c.name)]
+        .join(" ").toLowerCase();
+      return text.includes(lowerQuery);
+    });
+  }
+
+  if (category !== "all") {
+    marketplaceFiltered = marketplaceFiltered.filter(p => p.category === category);
+  }
+
+  renderMarketplacePlugins();
+}
+
+async function handlePluginAction(plugin, action) {
+  const card = document.querySelector(`.marketplace-card[data-plugin-id="${plugin.id}"]`);
+  const btn = document.getElementById("detailActionButton");
+
+  const setLoading = (text) => {
+    if (btn) { btn.disabled = true; btn.textContent = text; }
+  };
+
+  try {
+    if (action === "install") {
+      setLoading("Installing...");
+      const resp = await fetch(`/projects/${PROJECT_ID}/plugins/${plugin.id}/install`, { method: "POST" });
+      if (resp.ok) {
+        const state = await resp.json();
+        Object.assign(plugin, state);
+        refreshPluginState(plugin, card);
+        renderPluginDetail(plugin);
+        refreshProjectPluginViews();
+      } else {
+        setLoading("Failed");
+      }
+    } else if (action === "enable") {
+      setLoading("Enabling...");
+      const resp = await fetch(`/projects/${PROJECT_ID}/plugins/${plugin.id}/enable`, { method: "POST" });
+      if (resp.ok) {
+        const state = await resp.json();
+        Object.assign(plugin, state);
+        refreshPluginState(plugin, card);
+        renderPluginDetail(plugin);
+        refreshProjectPluginViews();
+      } else {
+        setLoading("Failed");
+      }
+    } else if (action === "disable") {
+      setLoading("Disabling...");
+      const resp = await fetch(`/projects/${PROJECT_ID}/plugins/${plugin.id}/disable`, { method: "POST" });
+      if (resp.ok) {
+        const state = await resp.json();
+        Object.assign(plugin, state);
+        refreshPluginState(plugin, card);
+        renderPluginDetail(plugin);
+        refreshProjectPluginViews();
+      } else {
+        setLoading("Failed");
+      }
+    }
+  } catch (error) {
+    setLoading("Failed");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function refreshPluginState(plugin, card) {
+  const dot = card?.querySelector(".status-dot");
+  if (dot) {
+    dot.className = `status-dot ${getStatusClass(plugin.status)}`;
+    dot.title = plugin.status;
+  }
+}
+
+// Wire up marketplace event listeners
+if (marketplaceSearchInput) {
+  marketplaceSearchInput.addEventListener("input", handleMarketplaceSearch);
+}
+if (marketplaceCategorySelect) {
+  marketplaceCategorySelect.addEventListener("change", handleMarketplaceSearch);
+}
+
+// Load marketplace when navigation clicked
+const marketplaceNavButton = document.querySelector('.nav-item[data-page="marketplace"]');
+if (marketplaceNavButton) {
+  marketplaceNavButton.addEventListener("click", () => {
+    if (!marketplaceAllPlugins.length) {
+      loadMarketplace();
+    } else {
+      handleMarketplaceSearch();
+    }
+  });
+}
+
+// Auto-load marketplace if already active
+if (marketplacePage && marketplacePage.classList.contains("active")) {
+  loadMarketplace();
+}
+
+const installedNavButton = document.querySelector('.nav-item[data-page="installed"]');
+const topologyNavButton = document.querySelector('.nav-item[data-page="topology"]');
+if (installedNavButton) {
+  installedNavButton.addEventListener("click", () => {
+    if (!marketplaceAllPlugins.length) loadMarketplace();
+    else refreshProjectPluginViews();
+  });
+}
+if (topologyNavButton) {
+  topologyNavButton.addEventListener("click", () => {
+    if (!marketplaceAllPlugins.length) loadMarketplace();
+    else refreshProjectPluginViews();
+  });
+}
+
+// Shared plugin detail template state
+let currentPluginDetail = null;
+let marketplaceHistoryPushed = false;
+let detailReturnPage = "marketplace";
+let marketplaceSearchText = "";
+let marketplaceSelectedCategory = "all";
+let marketplaceScrollTop = 0;
+
+const DETAIL_STATUS_LABELS = {
+  available: "Available",
+  installed: "Installed",
+  configuration_required: "Setup required",
+  connected: "Connected",
+  degraded: "Degraded",
+  disconnected: "Disconnected",
+  disabled: "Disabled",
+  error: "Error"
+};
+
+function saveMarketplaceState() {
+  marketplaceSearchText = marketplaceSearchInput?.value || "";
+  marketplaceSelectedCategory = marketplaceCategorySelect?.value || "all";
+  marketplaceScrollTop = marketplaceGrid?.scrollTop || 0;
+}
+
+function restoreMarketplaceState() {
+  if (marketplaceSearchInput) marketplaceSearchInput.value = marketplaceSearchText;
+  if (marketplaceCategorySelect) marketplaceCategorySelect.value = marketplaceSelectedCategory;
+}
+
+function setDetailText(id, value, fallback = "Not provided") {
+  const element = document.getElementById(id);
+  if (element) element.textContent = value || fallback;
+}
+
+function renderDetailList(container, items, formatter) {
+  container.replaceChildren();
+  if (!items || items.length === 0) {
+    const empty = document.createElement("span");
+    empty.className = "detail-empty";
+    empty.textContent = "Not provided by this manifest";
+    container.appendChild(empty);
+    return;
+  }
+  items.forEach(item => container.appendChild(formatter(item)));
+}
+
+function createDetailTag(label, description = "") {
+  const item = document.createElement("div");
+  item.className = "detail-item";
+  const title = document.createElement("strong");
+  title.textContent = label;
+  item.appendChild(title);
+  if (description) {
+    const body = document.createElement("span");
+    body.textContent = description;
+    item.appendChild(body);
+  }
+  return item;
+}
+
+function renderPluginDetail(plugin) {
+  const detailStatus = plugin.status || (plugin.installed ? "installed" : "available");
+  const statusElement = document.getElementById("detailStatus");
+  const statusGroup = document.getElementById("detailStatusGroup");
+  const actionButton = document.getElementById("detailActionButton");
+
+  renderPluginIcon(document.getElementById("detailIcon"), plugin, "detail");
+  setDetailText("detailPluginName", plugin.name, "Plugin detail");
+  setDetailText("detailFullName", plugin.name);
+  setDetailText("detailVendor", plugin.vendor);
+  setDetailText("detailCategory", plugin.category);
+  setDetailText("detailDescription", plugin.description);
+  setDetailText("detailBilling", BILLING_LABELS[plugin.billingMode] || plugin.billingMode);
+  setDetailText("detailStatus", DETAIL_STATUS_LABELS[detailStatus] || detailStatus);
+  statusElement.className = `detail-status-label status-${getStatusClass(detailStatus)}`;
+  statusGroup.dataset.status = detailStatus;
+
+  renderDetailList(
+    document.getElementById("detailCapabilities"),
+    plugin.capabilities,
+    capability => createDetailTag(capability.name, capability.description)
+  );
+  renderDetailList(
+    document.getElementById("detailAuth"),
+    plugin.supportedAuth,
+    auth => createDetailTag(auth)
+  );
+  renderDetailList(
+    document.getElementById("detailRisk"),
+    plugin.riskLevels,
+    risk => createDetailTag(risk, "Manifest permission level")
+  );
+
+  const metadata = document.getElementById("detailMetadata");
+  metadata.replaceChildren();
+  [
+    ["Connection", plugin.connectionType],
+    ["Availability", plugin.availability],
+    ["Installable", plugin.installable === true ? "Yes" : "No"]
+  ].forEach(([label, value]) => metadata.appendChild(createDetailTag(label, value)));
+
+  actionButton.disabled = detailStatus === "connected";
+  actionButton.textContent = detailStatus === "connected"
+    ? "Connected"
+    : (!plugin.installed ? "Install" : (detailStatus === "configuration_required" ? "Configure" : (plugin.enabled ? "Disable" : "Enable")));
+  actionButton.onclick = () => {
+    if (!actionButton.disabled) {
+      handlePluginAction(plugin, !plugin.installed ? "install" : (plugin.enabled ? "disable" : "enable"));
+    }
+  };
+}
+
+function showPluginDetail(plugin) {
+  currentPluginDetail = plugin;
+  const activePage = document.querySelector(".page.active");
+  detailReturnPage = activePage && activePage.id !== "marketplaceDetail"
+    ? activePage.id
+    : "marketplace";
+  saveMarketplaceState();
+  document.querySelectorAll(".page").forEach(page => page.classList.remove("active"));
+  const detailPage = document.getElementById("marketplaceDetail");
+  detailPage.removeAttribute("hidden");
+  detailPage.classList.add("active");
+  const backLabel = document.querySelector("#detailBackButton span:last-child");
+  if (backLabel) {
+    backLabel.textContent = detailReturnPage === "topology"
+      ? "Back to Workspace Topology"
+      : detailReturnPage === "installed"
+        ? "Back to Installed"
+        : "Back to Marketplace";
+  }
+  renderPluginDetail(plugin);
+
+  if (!marketplaceHistoryPushed) {
+    history.pushState({ marketplaceDetail: plugin.id }, "", `#plugin/${encodeURIComponent(plugin.id)}`);
+    marketplaceHistoryPushed = true;
+  }
+}
+
+function hidePluginDetail(fromHistory = false) {
+  const detailPage = document.getElementById("marketplaceDetail");
+  detailPage.classList.remove("active");
+  detailPage.setAttribute("hidden", "");
+  const returnPage = document.getElementById(detailReturnPage) || marketplacePage;
+  returnPage.classList.add("active");
+  currentPluginDetail = null;
+  if (detailReturnPage === "marketplace") {
+    restoreMarketplaceState();
+    handleMarketplaceSearch();
+    requestAnimationFrame(() => {
+      if (marketplaceGrid) marketplaceGrid.scrollTop = marketplaceScrollTop;
+    });
+  } else {
+    refreshProjectPluginViews();
+  }
+
+  if (!fromHistory && marketplaceHistoryPushed) {
+    marketplaceHistoryPushed = false;
+    history.back();
+  } else {
+    marketplaceHistoryPushed = false;
+  }
+}
+
+const detailBackButton = document.getElementById("detailBackButton");
+if (detailBackButton) detailBackButton.addEventListener("click", () => hidePluginDetail());
+window.addEventListener("popstate", event => {
+  if (marketplaceHistoryPushed && !event.state?.marketplaceDetail) hidePluginDetail(true);
+});
+
+window.TomTopology.init({
+  projectId: PROJECT_ID,
+  renderIcon: renderPluginIcon,
+  viewDetails: node => {
+    const plugin = marketplaceAllPlugins.find(item => item.id === node.pluginId);
+    showPluginDetail(plugin || { ...node, id: node.pluginId, name: node.label, status: node.rawStatus });
+  }
+});

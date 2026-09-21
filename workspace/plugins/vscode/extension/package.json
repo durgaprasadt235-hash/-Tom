@@ -1,0 +1,12 @@
+{
+  "name": "tom-vscode-readonly-bridge",
+  "displayName": "Tom Read-Only Bridge",
+  "description": "Local, unpublished read-only bridge for the authorized Tom project.",
+  "version": "0.0.1",
+  "publisher": "tom-local",
+  "engines": { "vscode": "^1.85.0" },
+  "main": "./extension.js",
+  "activationEvents": ["onStartupFinished"],
+  "contributes": {},
+  "private": true
+}

@@ -6,6 +6,7 @@
   <title>Tom | Project Workspace</title>
 
   <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/topology.css">
 </head>
 
 <body>
@@ -57,6 +58,21 @@
       <button class="nav-item" data-page="activity">
         <span>↗</span>
         <span>Activity</span>
+      </button>
+
+      <button class="nav-item" data-page="marketplace">
+        <span>⊞</span>
+        <span>Marketplace</span>
+      </button>
+
+      <button class="nav-item" data-page="installed">
+        <span>▣</span>
+        <span>Installed</span>
+      </button>
+
+      <button class="nav-item" data-page="topology">
+        <span>⌘</span>
+        <span>Workspace Topology</span>
       </button>
 
     </nav>
@@ -128,17 +144,10 @@
     <section id="home" class="page active">
 
       <div class="page-heading">
-
         <div>
-          <h1>Good morning, Durga</h1>
-          <p>Here's your project overview for today.</p>
+          <h1>Dashboard</h1>
         </div>
-
-        <div class="shift-status">
-          <strong>On Shift</strong>
-          <span id="currentTime">--:--</span>
-        </div>
-
+        <span id="currentTime">--:--</span>
       </div>
 
 
@@ -146,18 +155,13 @@
       <section class="card health-card">
 
         <div class="card-header">
-
           <div>
             <h2>Workspace Health</h2>
-            <p id="healthSummary">
-              Checking your project environment...
-            </p>
+              <p id="healthSummary">Checking your project environment...</p>
           </div>
-
           <button id="healthCheckButton" class="primary-button">
             Run Health Check
           </button>
-
         </div>
 
 
@@ -287,6 +291,20 @@
             <div class="tool-meta">
               <span>✓ Staging ready</span>
               <span>6/6 services</span>
+            </div>
+          </div>
+          <div class="tool-card">
+            <div class="tool-card-header">
+              <div class="tool-icon git">🌿</div>
+              <div class="tool-name">Git</div>
+            </div>
+            <div class="tool-status">
+              <span class="status-dot"></span>
+              <span class="status-text">Connected</span>
+            </div>
+            <div class="tool-meta">
+              <span>Read-only</span>
+              <span>Authorized</span>
             </div>
           </div>
         </div>
@@ -490,6 +508,10 @@
           <span id="workspaceStatusDetail">Reading project…</span>
         </div>
       </div>
+      <div class="shift-status">
+        <strong id="workspaceStatus">Loading</strong>
+        <span id="workspaceStatusDetail">Reading project…</span>
+      </div>
 
       <!-- PROJECT SUMMARY -->
       <section class="card workspace-summary-card">
@@ -557,11 +579,120 @@
       <p>Project members, roles, responsibilities and ownership.</p>
     </section>
 
-    <section id="activity" class="page">
+        <section id="activity" class="page">
       <h1>Activity</h1>
       <p>Verified project execution and evidence history.</p>
     </section>
 
+    <!-- MARKETPLACE -->
+    <section id="marketplace" class="page">
+      <div class="page-heading">
+        <h1>Plugin Marketplace</h1>
+        <span class="status-dot healthy" title="Catalog ready"></span>
+      </div>
+
+      <div class="marketplace-controls">
+        <div class="marketplace-search">
+          <input type="search" id="marketplaceSearch" placeholder="Search plugins, tools, vendors..." aria-label="Search plugins" />
+        </div>
+        <div class="marketplace-filters">
+          <select id="marketplaceCategory" aria-label="Filter by category">
+            <option value="all">All Categories</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="marketplace-grid" id="marketplaceGrid">
+        <!-- Plugin cards populated by app.js -->
+      </div>
+    </section>
+
+    <!-- PLUGIN DETAIL VIEW -->
+    <section id="marketplaceDetail" class="page" hidden>
+      <div class="page-heading">
+        <button class="marketplace-back" id="detailBackButton" data-action="back" type="button">
+          <span>←</span>
+          <span>Back to Marketplace</span>
+        </button>
+        <h1 id="detailPluginName">Plugin detail</h1>
+      </div>
+
+      <div class="detail-view">
+        <div class="detail-header">
+          <div class="detail-icon" id="detailIcon" aria-hidden="true"></div>
+          <div class="detail-heading-copy">
+            <h2 id="detailFullName"></h2>
+            <p><span id="detailVendor"></span><span class="detail-divider">·</span><span id="detailCategory"></span></p>
+            <p id="detailDescription"></p>
+          </div>
+          <div class="detail-status" id="detailStatusGroup">
+            <span class="detail-status-label" id="detailStatus"></span>
+            <span class="detail-billing" id="detailBilling"></span>
+          </div>
+        </div>
+
+        <div class="detail-grid">
+          <section class="detail-section">
+            <h3>Capabilities</h3>
+            <div id="detailCapabilities" class="detail-list"></div>
+          </section>
+
+          <section class="detail-section">
+            <h3>Authentication</h3>
+            <div id="detailAuth" class="detail-list"></div>
+          </section>
+
+          <section class="detail-section">
+            <h3>Permissions &amp; security</h3>
+            <div id="detailRisk" class="detail-list"></div>
+          </section>
+
+          <section class="detail-section">
+            <h3>Integration</h3>
+            <div id="detailMetadata" class="detail-info"></div>
+          </section>
+        </div>
+
+        <div class="detail-footer">
+          <button id="detailActionButton" class="primary-button" type="button">Install</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- INSTALLED PLUGINS -->
+    <section id="installed" class="page">
+      <div class="page-heading">
+        <div>
+          <h1>Installed</h1>
+          <p>Project-scoped integrations and their current lifecycle state.</p>
+        </div>
+        <span class="project-scope-label">Project Alpha</span>
+      </div>
+      <div class="installed-summary" id="installedSummary"></div>
+      <div class="installed-grid" id="installedGrid">
+        <div class="marketplace-loading">Open Installed to load project integrations.</div>
+      </div>
+    </section>
+
+    <!-- WORKSPACE TOPOLOGY -->
+    <section id="topology" class="page">
+      <div class="topo-header"><div><span class="topo-eyebrow">CONTROL PLANE</span><h1>Workspace Topology</h1><p id="topoProject">Loading project…</p></div>
+        <div class="topo-toolbar"><input id="topoSearch" type="search" placeholder="Search nodes / connections" aria-label="Search nodes and connections">
+          <button id="topoAuto">Auto Layout</button><button id="topoSave">Save Layout</button><button id="topoAdd">+ Add Connection</button></div>
+      </div>
+      <div id="topoFilters" class="topo-filters" aria-label="Filter integration status"></div>
+      <div class="topo-workspace">
+        <div id="topologyCanvas" class="topo-canvas" tabindex="0" aria-label="Topology canvas. Drag background to pan. Use zoom controls or arrow keys to pan.">
+          <div id="topoWorld" class="topo-world"><div id="topoUnverified" class="topo-unverified">Installed — connection not verified</div><svg id="topoEdges" aria-label="Verified relationships"></svg><div id="topoNodes"></div></div>
+          <div class="topo-canvas-caption" id="topoSummary">Loading topology…</div>
+          <div class="topo-controls"><button id="topoZoomOut" aria-label="Zoom out">−</button><span id="topoZoomValue">100%</span><button id="topoZoomIn" aria-label="Zoom in">+</button><button id="topoFit">Fit to View</button></div>
+          <div id="topoEmpty" class="topo-empty" hidden>No matching integrations</div>
+        </div>
+        <aside id="topoPanel" class="topo-panel" aria-label="Node details" hidden></aside>
+      </div>
+      <div class="topo-meta"><span id="topoMessage" role="status"></span><span id="topoUpdated"></span></div>
+      <div class="topo-bottom"><section><h2>Connection Legend</h2><div id="topoLegend" class="topo-legend"></div></section><section><h2>Workspace Health</h2><div id="topoHealth" class="topo-health"></div></section><section><h2>Recent Activity</h2><div id="topoActivity">No recent integration activity</div></section><section><h2>Alerts / Insights</h2><div id="topoAlerts">No integration alerts</div></section></div>
+    </section>
 
   </main>
 
@@ -661,6 +792,7 @@
   <button class="tom-open-toggle" id="tomOpenToggle" type="button" aria-label="Open Tom" title="Open Tom" aria-controls="tomPanel" aria-expanded="false">Tom</button>
 
 
+  <script src="/topology.js"></script>
   <script src="/app.js"></script>
 
 </body>
