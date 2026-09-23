@@ -11,7 +11,7 @@ const APPROVAL_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 const approvals = new Map();
 
-function createApproval(relativePath, edits, sourceHash) {
+function createApproval(relativePath, edits, sourceHash, verification = null) {
   const approvalId = crypto.randomUUID();
   const now = Date.now();
   approvals.set(approvalId, {
@@ -19,6 +19,7 @@ function createApproval(relativePath, edits, sourceHash) {
     path: relativePath,
     edits,
     sourceHash,
+    verification,
     createdAt: now,
     expiresAt: now + APPROVAL_TTL_MS,
     used: false

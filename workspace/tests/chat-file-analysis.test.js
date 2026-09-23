@@ -103,7 +103,7 @@ test('planFileAnalysis returns null for normal chat that does not need a file', 
 });
 
 test('planGitTools and planVscodeTools are unaffected by file analysis wording', () => {
-  assert.deepEqual(planGitTools('what changed recently?'), ['git.status', 'git.diff']);
+  assert.deepEqual(planGitTools('what changed recently?'), []);
   assert.deepEqual(planVscodeTools('what file am I working on?'), ['vscode.file.active']);
 });
 

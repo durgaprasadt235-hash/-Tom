@@ -233,7 +233,7 @@ function readFile(projectId, relativePath) {
 // Reuses readProjectFile so a proposal is only possible for a path that
 // already passes the same read security boundary (blocked names/exts,
 // traversal, size). Edits are validated in full before an approval exists.
-function proposeEdit(projectId, relativePath, edits) {
+function proposeEdit(projectId, relativePath, edits, verification = null) {
   requireSession(projectId);
   if (typeof relativePath !== "string" || !relativePath.trim()) {
     throw new Error("A valid project file path is required");
@@ -241,7 +241,7 @@ function proposeEdit(projectId, relativePath, edits) {
   const currentContent = readProjectFile(relativePath);
   const { summary } = patchValidator.validateEdits(currentContent, edits);
   const sourceHash = sha256(currentContent);
-  const approvalId = editApprovals.createApproval(relativePath, edits, sourceHash);
+  const approvalId = editApprovals.createApproval(relativePath, edits, sourceHash, verification);
   const approval = editApprovals.getApproval(approvalId);
   return {
     approvalId,
@@ -269,6 +269,9 @@ function applyEdit(projectId, approvalId, relativePath) {
   // (defense in depth) and enforces the same write-size/symlink checks.
   const writeResult = writeProjectFile(approval.path, newContent);
   const content = readProjectFile(approval.path);
+  if (content !== newContent) {
+    throw new Error("Post-write verification failed");
+  }
   return {
     path: approval.path,
     applied: true,

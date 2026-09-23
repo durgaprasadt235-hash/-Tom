@@ -3,6 +3,7 @@ const gitTool = require("./git-tool");
 const pluginManager = require("../plugins/runtime/plugin-manager");
 const vscodeBridge = require("../plugins/vscode/vscode-bridge");
 const activityTracker = require("../plugins/runtime/activity-tracker");
+const terminalRunner = require("./terminal-runner");
 
 const VSCODE_PROJECT_ID = "drop";
 
@@ -10,7 +11,18 @@ const STATIC_TOOLS = {
   "git.status": { name: "git.status", description: "Get the status of the authorized Drop repository", capability: "repository.status", riskLevel: "read", handler: gitTool.status },
   "git.branch": { name: "git.branch", description: "List branches in the authorized Drop repository", capability: "repository.branch", riskLevel: "read", handler: gitTool.branch },
   "git.log": { name: "git.log", description: "Get commit history of the authorized Drop repository", capability: "repository.log", riskLevel: "read", handler: gitTool.log },
-  "git.diff": { name: "git.diff", description: "Show file differences in the authorized Drop repository", capability: "repository.diff", riskLevel: "read", handler: gitTool.diff }
+  "git.diff": { name: "git.diff", description: "Show file differences in the authorized Drop repository", capability: "repository.diff", riskLevel: "read", handler: gitTool.diff },
+  "terminal.run": {
+    name: "terminal.run",
+    description: "Run one allowlisted verification command inside the authorized Drop project",
+    capability: "terminal.run",
+    riskLevel: "read",
+    requiresArgs: true,
+    handler: (args) => {
+      if (!args || typeof args.command !== "string") throw new Error("A 'command' argument (string) is required");
+      return terminalRunner.run(args.command, args.cwd || "web");
+    }
+  }
 };
 
 const VSCODE_TOOLS = {
@@ -45,7 +57,7 @@ const VSCODE_TOOLS = {
       if (!Array.isArray(args.edits)) {
         throw new Error("An 'edits' argument (array) is required");
       }
-      return vscodeBridge.proposeEdit(VSCODE_PROJECT_ID, args.path, args.edits);
+      return vscodeBridge.proposeEdit(VSCODE_PROJECT_ID, args.path, args.edits, args.verification || null);
     }
   },
   "vscode.file.apply_edit": {

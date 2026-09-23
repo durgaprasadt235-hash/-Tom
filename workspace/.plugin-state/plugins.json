@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "projects": {
+    "drop": {
+      "installed": [
+        "github",
+        "vercel",
+        "neon",
+        "databricks",
+        "vscode"
+      ],
+      "enabled": [
+        "github",
+        "vercel",
+        "neon",
+        "databricks",
+        "vscode"
+      ]
+    }
+  }
+}

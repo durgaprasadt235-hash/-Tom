@@ -8,6 +8,8 @@ const vscodeBridge = require('../plugins/vscode/vscode-bridge');
 const actionGateway = require('../tools/action-gateway');
 const editApprovalStore = require('../tools/edit-approval-store');
 const patchValidator = require('../tools/patch-validator');
+const { planEditApproval } = require('../tools/chat-tool-planner');
+const { sanitizeAndBoundHistory, findPendingApprovalId } = require('../tools/agent-runtime');
 
 const PROJECT_ID = 'drop';
 const CLIENT_INSTANCE_ID = 'tom-test-client-edit-approval';
@@ -90,6 +92,35 @@ test('a valid approval applies the exact approved patch', async () => {
   assert.equal(apply.data.applied, true);
   assert.equal(apply.data.content, 'line one\nline TWO\nline three\n');
   assert.equal(fs.readFileSync(FIXTURE_ABSOLUTE_PATH, 'utf8'), 'line one\nline TWO\nline three\n');
+});
+
+test('a proposal is applied on the next turn by contextual approval', async () => {
+  const proposal = await actionGateway.executeTool('vscode.file.propose_edit', {
+    path: FIXTURE_RELATIVE_PATH,
+    edits: [{ oldText: 'line two', newText: 'line TWO' }]
+  });
+  const history = sanitizeAndBoundHistory([
+    { role: 'user', content: `Propose an edit to ${FIXTURE_RELATIVE_PATH}.` },
+    {
+      role: 'assistant',
+      content: 'Proposed edit. Waiting for approval.',
+      approvalId: proposal.data.approvalId
+    }
+  ]);
+  const approval = planEditApproval(
+    'Approved. Apply the proposed change.',
+    findPendingApprovalId(history)
+  );
+  const pending = editApprovalStore.getApproval(approval.approvalId);
+  const applied = await actionGateway.executeTool('vscode.file.apply_edit', {
+    approvalId: approval.approvalId,
+    path: pending.path
+  });
+
+  assert.equal(applied.success, true);
+  assert.equal(applied.data.content, 'line one\nline TWO\nline three\n');
+  assert.equal(fs.readFileSync(FIXTURE_ABSOLUTE_PATH, 'utf8'), applied.data.content);
+  assert.equal(editApprovalStore.getApproval(approval.approvalId).used, true);
 });
 
 // --------------------------------------------------

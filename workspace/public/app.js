@@ -6,33 +6,99 @@
 const navItems = document.querySelectorAll(".nav-item[data-page]");
 const pages = document.querySelectorAll(".page");
 
+function activatePage(target, activeTarget = target) {
+  const targetPage = document.getElementById(target);
+  if (!targetPage) return;
+
+  navItems.forEach((nav) => {
+    nav.classList.toggle("active", nav.dataset.page === activeTarget);
+  });
+  pages.forEach((page) => page.classList.toggle("active", page === targetPage));
+  document.body.classList.toggle("command-page", target === "command");
+
+  if (target === "workspace" && !workspaceLoaded) loadWorkspace();
+  if (target === "marketplace") {
+    if (!marketplaceAllPlugins.length) loadMarketplace();
+    else handleMarketplaceSearch();
+  }
+  if (target === "installed" || target === "topology") {
+    if (!marketplaceAllPlugins.length) loadMarketplace();
+    else refreshProjectPluginViews();
+  }
+
+  if (mobileLayout.matches) closeMobileDrawers();
+}
+
 navItems.forEach((item) => {
   item.addEventListener("click", () => {
-    const target = item.dataset.page;
-    const targetPage = document.getElementById(target);
-
-    if (!targetPage) return;
-
-    navItems.forEach((nav) => nav.classList.remove("active"));
-    pages.forEach((page) => page.classList.remove("active"));
-
-    item.classList.add("active");
-    targetPage.classList.add("active");
-    if (mobileLayout.matches) closeMobileDrawers();
+    activatePage(item.dataset.page);
   });
 });
 
+document.querySelectorAll("[data-open-page]").forEach((button) => {
+  button.addEventListener("click", () => {
+    activatePage(button.dataset.openPage, "marketplace");
+  });
+});
+
+const sidebarNewTask = document.getElementById("sidebarNewTask");
+if (sidebarNewTask) {
+  sidebarNewTask.addEventListener("click", () => {
+    startNewConversation();
+    activatePage("command");
+  });
+}
+
+const sidebarAskTom = document.getElementById("sidebarAskTom");
+if (sidebarAskTom) {
+  sidebarAskTom.addEventListener("click", () => activatePage("command"));
+}
+
+document.querySelectorAll("[data-home-page]").forEach((button) => {
+  button.addEventListener("click", () => activatePage(button.dataset.homePage));
+});
+
+const intelligenceTabs = document.querySelectorAll(".intelligence-tab");
+const intelligencePanels = document.querySelectorAll(".intelligence-panel");
+
+intelligenceTabs.forEach((tab) => {
+  tab.addEventListener("click", () => {
+    const targetTab = tab.dataset.tab;
+
+    intelligenceTabs.forEach((item) => {
+      item.classList.toggle("active", item === tab);
+      item.setAttribute("aria-selected", String(item === tab));
+    });
+
+    intelligencePanels.forEach((panel) => {
+      panel.classList.toggle("active", panel.dataset.panel === targetTab);
+    });
+  });
+});
 
 // Live clock
 function updateClock() {
   const clock = document.getElementById("currentTime");
+  const date = document.getElementById("currentDate");
 
-  if (!clock) return;
+  if (!clock && !date) return;
 
-  clock.textContent = new Date().toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit"
-  });
+  const now = new Date();
+
+  if (clock) {
+    clock.textContent = now.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  }
+
+  if (date) {
+    date.textContent = now.toLocaleDateString([], {
+      weekday: "long",
+      month: "long",
+      day: "numeric"
+    });
+  }
 }
 
 updateClock();
@@ -45,24 +111,21 @@ setInterval(updateClock, 30000);
 
 const healthButton = document.getElementById("healthCheckButton");
 const healthSummary = document.getElementById("healthSummary");
-const connections = document.querySelectorAll(".connection");
+const connections = document.querySelectorAll(".health-row");
 
 async function runWorkspaceHealthCheck() {
   healthButton.disabled = true;
   healthButton.textContent = "Checking...";
 
   healthSummary.textContent =
-    "Tom is verifying your project workspace.";
+    "Checking Tom frontend...";
 
   connections.forEach((connection) => {
     const status = connection.querySelector(".connection-status");
 
-    status.textContent = "Checking";
-    status.classList.remove("healthy");
+    status.textContent = "Status unavailable";
   });
 
-  // POC health verification.
-  // We verify that the Tom backend is reachable.
   try {
     const response = await fetch("/");
 
@@ -70,23 +133,12 @@ async function runWorkspaceHealthCheck() {
       throw new Error("Tom backend unavailable");
     }
 
-    // For the POC these project connections are simulated.
-    // Later each one gets its own real connector health endpoint.
-    for (const connection of connections) {
-      const status = connection.querySelector(".connection-status");
-
-      await new Promise((resolve) => setTimeout(resolve, 180));
-
-      status.textContent = "Connected";
-      status.classList.add("healthy");
-    }
-
     healthSummary.textContent =
-      "All configured project services are available.";
+      "Tom frontend reachable";
 
   } catch (error) {
     healthSummary.textContent =
-      "Workspace verification failed. Check the Tom connection.";
+      "Tom frontend unavailable";
 
   } finally {
     healthButton.disabled = false;
@@ -94,7 +146,9 @@ async function runWorkspaceHealthCheck() {
   }
 }
 
-healthButton.addEventListener("click", runWorkspaceHealthCheck);
+if (healthButton) {
+  healthButton.addEventListener("click", runWorkspaceHealthCheck);
+}
 
 
 // ---------------------------------------
@@ -368,8 +422,8 @@ function applyPanelLayout() {
   sidebarToggle.setAttribute("aria-label", navOpen ? "Collapse navigation" : "Open navigation");
   tomOpenToggle.setAttribute("aria-expanded", String(!collapsed));
   tomOpenToggle.inert = mobile && mobileDrawer !== null;
-  toggleButton.setAttribute("aria-label", mobile ? "Close Tom" : "Collapse Tom");
-  toggleButton.title = mobile ? "Close Tom" : "Collapse Tom";
+  toggleButton.setAttribute("aria-label", mobile ? "Close task intelligence" : "Collapse task intelligence");
+  toggleButton.title = mobile ? "Close task intelligence" : "Collapse task intelligence";
   toggleButton.textContent = mobile ? "×" : "›";
   panelBackdrop.hidden = !mobile || mobileDrawer === null;
 }
@@ -435,15 +489,17 @@ document.addEventListener("keydown", (event) => {
   }
 });
 panel.setAttribute("role", "complementary");
-panel.setAttribute("aria-label", "Tom AI assistant");
+panel.setAttribute("aria-label", "Task intelligence");
 applyPanelLayout();
 
 // History toggle
 let historyVisible = false;
+historyPanel.style.display = "none";
 function toggleHistory() {
   historyVisible = !historyVisible;
   historyPanel.style.display = historyVisible ? "block" : "none";
   historyToggle.setAttribute("aria-expanded", historyVisible);
+  historyPanel.setAttribute("aria-hidden", String(!historyVisible));
   if (historyVisible) {
     historyToggle.textContent = "◁";
   } else {
@@ -628,7 +684,7 @@ function updateInputState(enable = true) {
   if (enable) {
     sendButton.disabled = false;
     inputField.disabled = false;
-    if (!collapsed && !mobileLayout.matches) inputField.focus();
+    if (!mobileLayout.matches && document.body.classList.contains("command-page")) inputField.focus();
     responseDisplay.textContent = "Tom is ready.";
   } else {
     sendButton.disabled = true;
@@ -673,7 +729,8 @@ async function sendMessage() {
     .filter(m => m.role === "user" || m.role === "tom")
     .map(m => ({
       role: m.role === "tom" ? "assistant" : m.role,
-      content: m.content
+      content: m.content,
+      ...(m.approvalId ? { approvalId: m.approvalId } : {})
     }));
 
   try {
@@ -716,7 +773,8 @@ async function sendMessage() {
     const tomMsg = {
       role: "tom",
       content: tomReply,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      ...(data.approvalId ? { approvalId: data.approvalId } : {})
     };
     conv.messages.push(tomMsg);
     conv.lastActivity = Date.now();
@@ -835,19 +893,12 @@ function toggleQuickActions() {
 // Send a normal chat prompt through the existing composer flow.
 function runQuickChat(prompt) {
   if (!prompt) return;
-  if (collapsed) {
-    togglePanel();
-  }
   inputField.value = prompt;
   sendMessage();
 }
 
 // Show a clear message when a file action is used with no active file.
 function showNoFileContext(actionLabel) {
-  if (collapsed) {
-    togglePanel();
-  }
-
   let conv = getActiveConversation();
   if (!conv) {
     conv = createConversation("Quick Actions");
@@ -876,10 +927,6 @@ async function runFileAction(question, actionLabel) {
   if (!file) {
     showNoFileContext(actionLabel);
     return;
-  }
-
-  if (collapsed) {
-    togglePanel();
   }
 
   setActiveFileContext(file);
@@ -997,7 +1044,7 @@ function initTomPanel() {
 
   // Focus input after a short delay
   setTimeout(() => {
-    if (!collapsed && !mobileLayout.matches) inputField.focus();
+    if (!collapsed && !mobileLayout.matches && document.body.classList.contains("command-page")) inputField.focus();
   }, 100);
 }
 
@@ -1251,11 +1298,6 @@ async function loadWorkspace() {
 async function askTomAboutFile() {
   if (!selectedWorkspaceFile) return;
 
-  // Make sure the existing Tom panel is visible.
-  if (collapsed) {
-    togglePanel();
-  }
-
   // Show the active file as a removable context chip.
   setActiveFileContext(selectedWorkspaceFile);
 
@@ -1477,19 +1519,6 @@ if (workspaceRefresh) {
 
 if (workspaceAskTom) {
   workspaceAskTom.addEventListener("click", askTomAboutFile);
-}
-
-// Load the project the first time the Workspace page is opened.
-const workspaceNavButton = document.querySelector(
-  '.nav-item[data-page="workspace"]'
-);
-
-if (workspaceNavButton) {
-  workspaceNavButton.addEventListener("click", () => {
-    if (!workspaceLoaded) {
-      loadWorkspace();
-    }
-  });
 }
 
 // If the Workspace page is already active on load, populate it.
@@ -1886,36 +1915,9 @@ if (marketplaceCategorySelect) {
   marketplaceCategorySelect.addEventListener("change", handleMarketplaceSearch);
 }
 
-// Load marketplace when navigation clicked
-const marketplaceNavButton = document.querySelector('.nav-item[data-page="marketplace"]');
-if (marketplaceNavButton) {
-  marketplaceNavButton.addEventListener("click", () => {
-    if (!marketplaceAllPlugins.length) {
-      loadMarketplace();
-    } else {
-      handleMarketplaceSearch();
-    }
-  });
-}
-
 // Auto-load marketplace if already active
 if (marketplacePage && marketplacePage.classList.contains("active")) {
   loadMarketplace();
-}
-
-const installedNavButton = document.querySelector('.nav-item[data-page="installed"]');
-const topologyNavButton = document.querySelector('.nav-item[data-page="topology"]');
-if (installedNavButton) {
-  installedNavButton.addEventListener("click", () => {
-    if (!marketplaceAllPlugins.length) loadMarketplace();
-    else refreshProjectPluginViews();
-  });
-}
-if (topologyNavButton) {
-  topologyNavButton.addEventListener("click", () => {
-    if (!marketplaceAllPlugins.length) loadMarketplace();
-    else refreshProjectPluginViews();
-  });
 }
 
 // Shared plugin detail template state

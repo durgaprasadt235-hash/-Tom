@@ -19,69 +19,88 @@
       <div class="brand-mark">T</div>
       <div>
         <div class="brand-name">Tom</div>
-        <div class="brand-subtitle">Project Workspace</div>
+        <div class="brand-subtitle">Agent Workspace</div>
       </div>
     </div>
 
+    <button class="new-task-action" id="sidebarNewTask" type="button">
+      <span aria-hidden="true">+</span>
+      <span>New Task</span>
+    </button>
+
     <nav class="nav">
+      <div class="nav-group">
+        <div class="nav-group-label">Workspace</div>
+        <button class="nav-item active" data-page="home">
+          <span>⌂</span>
+          <span>Home</span>
+        </button>
+        <button class="nav-item" data-page="command">
+          <span>⌘</span>
+          <span>Command</span>
+        </button>
+        <button class="nav-item" data-page="workspace">
+          <span>▣</span>
+          <span>Projects</span>
+        </button>
+        <button class="nav-item" data-page="topology">
+          <span>⌘</span>
+          <span>Topology</span>
+        </button>
+        <button class="nav-item" data-page="workflows">
+          <span>◇</span>
+          <span>Workflows</span>
+        </button>
+      </div>
 
-      <button class="nav-item active" data-page="home">
-        <span>⌂</span>
-        <span>Home</span>
-      </button>
+      <div class="nav-group">
+        <div class="nav-group-label">Orchestration</div>
+        <button class="nav-item" data-page="team">
+          <span>◎</span>
+          <span>Agents</span>
+        </button>
+        <button class="nav-item" data-page="marketplace">
+          <span>⇄</span>
+          <span>Connections</span>
+        </button>
+      </div>
 
-      <button class="nav-item" data-page="work">
-        <span>✓</span>
-        <span>My Work</span>
-      </button>
+      <div class="nav-group">
+        <div class="nav-group-label">Operations</div>
+        <button class="nav-item" data-page="runtime">
+          <span>▶</span>
+          <span>Runtime</span>
+        </button>
+        <button class="nav-item" data-page="logs">
+          <span>≡</span>
+          <span>Logs</span>
+        </button>
+        <button class="nav-item" data-page="metrics">
+          <span>↗</span>
+          <span>Metrics</span>
+        </button>
+      </div>
 
-      <button class="nav-item" data-page="workspace">
-        <span>▣</span>
-        <span>Workspace</span>
-      </button>
-
-      <button class="nav-item" data-page="incidents">
-        <span>△</span>
-        <span>Incidents</span>
-      </button>
-
-      <button class="nav-item" data-page="knowledge">
-        <span>▤</span>
-        <span>Knowledge</span>
-      </button>
-
-      <button class="nav-item" data-page="team">
-        <span>◎</span>
-        <span>Team</span>
-      </button>
-
-      <button class="nav-item" data-page="activity">
-        <span>↗</span>
-        <span>Activity</span>
-      </button>
-
-      <button class="nav-item" data-page="marketplace">
-        <span>⊞</span>
-        <span>Marketplace</span>
-      </button>
-
-      <button class="nav-item" data-page="installed">
-        <span>▣</span>
-        <span>Installed</span>
-      </button>
-
-      <button class="nav-item" data-page="topology">
-        <span>⌘</span>
-        <span>Workspace Topology</span>
-      </button>
-
+      <div class="nav-group">
+        <div class="nav-group-label">Control</div>
+        <button class="nav-item" data-page="work">
+          <span>✓</span>
+          <span>Approvals</span>
+        </button>
+        <button class="nav-item" data-page="activity">
+          <span>◷</span>
+          <span>Activity</span>
+        </button>
+      </div>
     </nav>
 
     <div class="sidebar-bottom">
-
-      <button class="nav-item" data-page="help">
-        <span>?</span>
-        <span>Help & Support</span>
+      <button class="ask-tom-card" id="sidebarAskTom" type="button">
+        <span class="tom-orb" aria-hidden="true"></span>
+        <span class="ask-tom-copy">
+          <strong>Ask Tom</strong>
+          <small>Your workspace copilot, always ready.</small>
+        </span>
       </button>
 
       <button class="nav-item" data-page="settings">
@@ -90,14 +109,12 @@
       </button>
 
       <div class="workspace-connection">
-        <span class="status-dot"></span>
-
+        <div class="avatar">DP</div>
         <div>
-          <strong>Project Workspace</strong>
-          <small>Connected</small>
+          <strong>Local user</strong>
+          <small>Workspace profile</small>
         </div>
       </div>
-
     </div>
 
   </aside>
@@ -106,394 +123,225 @@
   <!-- MAIN APPLICATION -->
   <main class="app">
 
-    <!-- TOP BAR -->
     <header class="topbar">
       <button class="panel-control" id="sidebarToggle" type="button" aria-controls="sidebar" aria-expanded="true" aria-label="Collapse navigation" title="Toggle navigation">☰</button>
 
       <div class="project-selector">
-        <strong>Project Alpha</strong>
-        <span>Data Migration & Integration</span>
-      </div>
-
-      <div class="project-status">
-        <span class="status-dot"></span>
-        Active
+        <strong>Tom Workspace</strong>
+        <span>Project: DROP</span>
       </div>
 
       <div class="search">
         <input
           type="text"
-          placeholder="Search tasks, docs, tools..."
+          placeholder="Search tasks, files, tools..."
           aria-label="Search tasks, docs, tools"
         />
       </div>
 
       <div class="profile">
         <div class="avatar">DP</div>
-
         <div>
           <strong>Durga Prasad</strong>
-          <span>Data Engineer</span>
+          <span>Workspace user</span>
         </div>
       </div>
-
     </header>
 
-
-    <!-- HOME -->
     <section id="home" class="page active">
+      <div class="home-dashboard">
+        <header class="home-welcome">
+          <div class="home-welcome-copy">
+            <span class="home-eyebrow">Workspace overview</span>
+            <h1>Good morning, Durga <span aria-hidden="true">👋</span></h1>
+            <p>Tom, your workspace copilot, always ready.</p>
+          </div>
+          <div class="home-shift">
+            <time id="currentDate">Loading date…</time>
+            <strong id="currentTime">--:--</strong>
+            <span><i aria-hidden="true"></i> On Shift</span>
+          </div>
+        </header>
 
-      <div class="page-heading">
-        <div>
-          <h1>Dashboard</h1>
-        </div>
-        <span id="currentTime">--:--</span>
-      </div>
-
-
-      <!-- WORKSPACE HEALTH -->
-      <section class="card health-card">
-
-        <div class="card-header">
+        <section class="home-tom-note">
+          <span class="tom-orb large" aria-hidden="true"></span>
           <div>
-            <h2>Workspace Health</h2>
-              <p id="healthSummary">Checking your project environment...</p>
+            <strong>Tom</strong>
+            <p>Build, automate, and focus on what matters.</p>
           </div>
-          <button id="healthCheckButton" class="primary-button">
-            Run Health Check
-          </button>
-        </div>
-
-
-        <div class="connection-grid">
-
-          <button class="connection" data-connection="Development Environment">
-            <span>Development Environment</span>
-            <strong class="connection-status">Checking</strong>
-          </button>
-
-          <button class="connection" data-connection="Source Database">
-            <span>Source Database</span>
-            <strong class="connection-status">Checking</strong>
-          </button>
-
-          <button class="connection" data-connection="Message Queue">
-            <span>Message Queue</span>
-            <strong class="connection-status">Checking</strong>
-          </button>
-
-          <button class="connection" data-connection="Scheduler">
-            <span>Scheduler</span>
-            <strong class="connection-status">Checking</strong>
-          </button>
-
-          <button class="connection" data-connection="File Server">
-            <span>File Server</span>
-            <strong class="connection-status">Checking</strong>
-          </button>
-
-          <button class="connection" data-connection="APIs">
-            <span>APIs</span>
-            <strong class="connection-status">Checking</strong>
-          </button>
-
-        </div>
-
-      </section>
-
-
-      <!-- CONNECTED TOOLS -->
-      <section class="card">
-        <div class="card-header">
-          <h2>Connected Applications</h2>
-          <button class="text-button">View All</button>
-        </div>
-        <div class="connected-tools-grid">
-          <div class="tool-card">
-            <div class="tool-card-header">
-              <div class="tool-icon db">☁</div>
-              <div class="tool-name">Source Database</div>
-            </div>
-            <div class="tool-status">
-              <span class="status-dot"></span>
-              <span class="status-text healthy">Connected</span>
-            </div>
-            <div class="tool-meta">
-              <span>✓ Replication OK</span>
-              <span>4.2s latency</span>
-            </div>
-          </div>
-          <div class="tool-card">
-            <div class="tool-card-header">
-              <div class="tool-icon queue">◷</div>
-              <div class="tool-name">Message Queue</div>
-            </div>
-            <div class="tool-status">
-              <span class="status-dot"></span>
-              <span class="status-text healthy">Connected</span>
-            </div>
-            <div class="tool-meta">
-              <span>✓ 1.2K messages/min</span>
-              <span>0.8s latency</span>
-            </div>
-          </div>
-          <div class="tool-card">
-            <div class="tool-card-header">
-              <div class="tool-icon scheduler">▶</div>
-              <div class="tool-name">Scheduler</div>
-            </div>
-            <div class="tool-status">
-              <span class="status-dot"></span>
-              <span class="status-text">Running</span>
-            </div>
-            <div class="tool-meta">
-              <span>✓ Jobs active</span>
-              <span>Last run: 08:20 AM</span>
-            </div>
-          </div>
-          <div class="tool-card">
-            <div class="tool-card-header">
-              <div class="tool-icon files">📁</div>
-              <div class="tool-name">File Server</div>
-            </div>
-            <div class="tool-status">
-              <span class="status-dot"></span>
-              <span class="status-text healthy">Connected</span>
-            </div>
-            <div class="tool-meta">
-              <span>✓ 842GB used</span>
-              <span>Current: 128GB</span>
-            </div>
-          </div>
-          <div class="tool-card">
-            <div class="tool-card-header">
-              <div class="tool-icon api">{ }</div>
-              <div class="tool-name">APIs</div>
-            </div>
-            <div class="tool-status">
-              <span class="status-dot"></span>
-              <span class="status-text healthy">Healthy</span>
-            </div>
-            <div class="tool-meta">
-              <span>✓ 34 endpoints</span>
-              <span>99.8% uptime</span>
-            </div>
-          </div>
-          <div class="tool-card">
-            <div class="tool-card-header">
-              <div class="tool-icon env">⚙</div>
-              <div class="tool-name">Environment</div>
-            </div>
-            <div class="tool-status">
-              <span class="status-dot"></span>
-              <span class="status-text healthy">Healthy</span>
-            </div>
-            <div class="tool-meta">
-              <span>✓ Staging ready</span>
-              <span>6/6 services</span>
-            </div>
-          </div>
-          <div class="tool-card">
-            <div class="tool-card-header">
-              <div class="tool-icon git">🌿</div>
-              <div class="tool-name">Git</div>
-            </div>
-            <div class="tool-status">
-              <span class="status-dot"></span>
-              <span class="status-text">Connected</span>
-            </div>
-            <div class="tool-meta">
-              <span>Read-only</span>
-              <span>Authorized</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-
-      <div class="dashboard-grid">
-
-        <!-- TODAY TASKS -->
-        <section class="card tasks-card">
-
-          <div class="card-header">
-            <h2>Today's Tasks</h2>
-            <button class="text-button">View All</button>
-          </div>
-
-          <div class="tabs">
-            <button class="tab active">My Tasks <span>5</span></button>
-            <button class="tab">In Progress <span>2</span></button>
-            <button class="tab">Blocked <span>0</span></button>
-            <button class="tab">Completed <span>1</span></button>
-          </div>
-
-          <div class="task-list">
-
-            <div class="task-row">
-              <span>T-101</span>
-              <strong>Validate incoming file schema</strong>
-              <span class="priority high">High</span>
-              <span>Today</span>
-              <span class="task-status progress">In Progress</span>
-            </div>
-
-            <div class="task-row">
-              <span>T-102</span>
-              <strong>Monitor data processing job</strong>
-              <span class="priority high">High</span>
-              <span>Today</span>
-              <span class="task-status">Pending</span>
-            </div>
-
-            <div class="task-row">
-              <span>T-103</span>
-              <strong>Run data quality checks</strong>
-              <span class="priority medium">Medium</span>
-              <span>Today</span>
-              <span class="task-status">Not Started</span>
-            </div>
-
-          </div>
-
+          <button type="button" data-home-page="command">Open Command</button>
         </section>
 
-
-        <!-- PIPELINES -->
-        <section class="card pipeline-card">
-
-          <div class="card-header">
-            <h2>Pipeline Status</h2>
-            <button class="text-button">View All</button>
-          </div>
-
-          <div class="pipeline-row">
-            <div>
-              <strong>Ingestion Pipeline</strong>
-              <span>Last run: 08:00 AM</span>
-            </div>
-            <span class="success">Success</span>
-          </div>
-
-          <div class="pipeline-row">
-            <div>
-              <strong>Transformation</strong>
-              <span>Last run: 08:20 AM</span>
-            </div>
-            <span class="success">Success</span>
-          </div>
-
-          <div class="pipeline-row">
-            <div>
-              <strong>Data Load</strong>
-              <span>Last run: 08:45 AM</span>
-            </div>
-            <span class="running">Running</span>
-          </div>
-
-          <div class="pipeline-row">
-            <div>
-              <strong>Reconciliation</strong>
-              <span>Last run: 07:00 AM</span>
-            </div>
-            <span class="success">Success</span>
-          </div>
-
+        <section class="summary-grid" aria-label="Workspace summary">
+          <article class="summary-card"><span>Total Tasks</span><strong>—</strong><small>Data not connected</small></article>
+          <article class="summary-card"><span>Active Agents</span><strong>—</strong><small>Data not connected</small></article>
+          <article class="summary-card"><span>Connected Apps</span><strong>—</strong><small>See Connections</small></article>
+          <article class="summary-card"><span>System Health</span><strong>—</strong><small id="healthSummary">Not checked</small></article>
         </section>
 
+        <div class="home-primary-grid">
+          <section class="home-panel health-panel">
+            <div class="home-panel-header">
+              <div><span class="panel-kicker">Environment</span><h2>Workspace Health</h2></div>
+              <button id="healthCheckButton" class="secondary-button" type="button">Run Health Check</button>
+            </div>
+            <div class="home-health-grid">
+              <div class="health-row" data-connection="Development Environment"><span>Development Environment</span><strong class="connection-status">Status unavailable</strong></div>
+              <div class="health-row" data-connection="Source Database"><span>Source Database</span><strong class="connection-status">Status unavailable</strong></div>
+              <div class="health-row" data-connection="Message Queue"><span>Message Queue</span><strong class="connection-status">Status unavailable</strong></div>
+              <div class="health-row" data-connection="File Server"><span>File Server</span><strong class="connection-status">Status unavailable</strong></div>
+              <div class="health-row" data-connection="Scheduler"><span>Scheduler</span><strong class="connection-status">Status unavailable</strong></div>
+              <div class="health-row" data-connection="APIs"><span>APIs</span><strong class="connection-status">Status unavailable</strong></div>
+            </div>
+            <p class="mock-disclosure">Service-level health is not connected yet. The check only confirms the local Tom frontend is reachable.</p>
+          </section>
 
-        <!-- ACTIVITY -->
-        <section class="card">
+          <section class="home-panel quick-actions-panel">
+            <div class="home-panel-header"><div><span class="panel-kicker">Shortcuts</span><h2>Quick Actions</h2></div></div>
+            <div class="home-action-grid">
+              <button type="button" disabled><span>＋</span><strong>New Project</strong><small>Not available</small></button>
+              <button type="button" data-home-page="workspace"><span>▣</span><strong>Open Workspace</strong><small>Project files</small></button>
+              <button type="button" data-home-page="command"><span>✦</span><strong>Ask Tom</strong><small>Open Command</small></button>
+              <button type="button" disabled><span>↑</span><strong>Deploy</strong><small>Not available</small></button>
+              <button type="button" data-home-page="logs"><span>≡</span><strong>View Logs</strong><small>Open Logs</small></button>
+              <button type="button" data-home-page="marketplace"><span>⊞</span><strong>Add App</strong><small>Connections</small></button>
+            </div>
+          </section>
+        </div>
 
-          <div class="card-header">
-            <h2>Recent Activity</h2>
-            <button class="text-button">View All</button>
+        <section class="home-panel connected-apps-panel">
+          <div class="home-panel-header">
+            <div><span class="panel-kicker">Integrations</span><h2>Connected Applications</h2></div>
+            <button class="text-button" type="button" data-home-page="marketplace">Manage connections</button>
           </div>
-
-          <div class="activity-list">
-            <div class="activity-item">
-              <div class="activity-time">8:45 AM</div>
-              <div class="activity-content">
-                <div class="activity-action">Data load job completed <span class="activity-badge success">Success</span></div>
-                <div class="activity-detail">All records migrated successfully</div>
-              </div>
-            </div>
-            <div class="activity-item">
-              <div class="activity-time">8:12 AM</div>
-              <div class="activity-content">
-                <div class="activity-action">Connected to message queue <span class="activity-badge info">Connected</span></div>
-                <div class="activity-detail">Established stable connection</div>
-              </div>
-            </div>
-            <div class="activity-item">
-              <div class="activity-time">7:58 AM</div>
-              <div class="activity-content">
-                <div class="activity-action">Validated incoming sample file <span class="activity-badge info">OK</span></div>
-                <div class="activity-detail">Schema validation passed</div>
-              </div>
-            </div>
-            <div class="activity-item">
-              <div class="activity-time">7:30 AM</div>
-              <div class="activity-content">
-                <div class="activity-action">Tom updated project knowledge</div>
-                <div class="activity-detail">Added new migration procedures</div>
-              </div>
-            </div>
+          <div class="home-app-grid">
+            <article><span class="app-monogram">VS</span><div><strong>VS Code</strong><small>Status available in Connections</small></div></article>
+            <article><span class="app-monogram">DB</span><div><strong>Source DB</strong><small>Status unavailable</small></div></article>
+            <article><span class="app-monogram">MQ</span><div><strong>Message Queue</strong><small>Status unavailable</small></div></article>
+            <article><span class="app-monogram">SC</span><div><strong>Scheduler</strong><small>Status unavailable</small></div></article>
+            <article><span class="app-monogram">FS</span><div><strong>File Server</strong><small>Status unavailable</small></div></article>
+            <article><span class="app-monogram">API</span><div><strong>APIs</strong><small>Status unavailable</small></div></article>
+            <article><span class="app-monogram">GT</span><div><strong>Git</strong><small>Status available in Connections</small></div></article>
+            <article><span class="app-monogram">EN</span><div><strong>Environment</strong><small>Status unavailable</small></div></article>
           </div>
-
         </section>
 
-
-        <!-- KNOWLEDGE -->
-        <section class="card">
-
-          <div class="card-header">
-            <h2>Project Knowledge</h2>
-            <button class="text-button">View All</button>
-          </div>
-
-          <div class="knowledge-grid">
-            <div class="knowledge-item">
-              <div class="knowledge-item-header">
-                <div class="knowledge-icon docs">📚</div>
-                <div class="knowledge-title">Migration Guide</div>
-              </div>
-              <div class="knowledge-desc">Complete migration process documentation</div>
-            </div>
-            <div class="knowledge-item">
-              <div class="knowledge-item-header">
-                <div class="knowledge-icon specs">📄</div>
-                <div class="knowledge-title">File Specs</div>
-              </div>
-              <div class="knowledge-desc">Data format and schema specifications</div>
-            </div>
-            <div class="knowledge-item">
-              <div class="knowledge-item-header">
-                <div class="knowledge-icon errors">⚠</div>
-                <div class="knowledge-title">Error Handling</div>
-              </div>
-              <div class="knowledge-desc">Common issues and resolution procedures</div>
-            </div>
-            <div class="knowledge-item">
-              <div class="knowledge-item-header">
-                <div class="knowledge-icon rules">✓</div>
-                <div class="knowledge-title">Quality Rules</div>
-              </div>
-              <div class="knowledge-desc">Data validation and quality standards</div>
-            </div>
-          </div>
-
-        </section>
-
+        <div class="home-lower-grid">
+          <section class="home-panel">
+            <div class="home-panel-header"><div><span class="panel-kicker">Work</span><h2>Today's Tasks</h2></div></div>
+            <div class="dashboard-empty"><strong>No task data connected</strong><span>Tasks will appear here when a task source is available.</span></div>
+          </section>
+          <section class="home-panel">
+            <div class="home-panel-header"><div><span class="panel-kicker">Delivery</span><h2>Pipeline Status</h2></div></div>
+            <div class="dashboard-empty"><strong>No pipeline data connected</strong><span>Pipeline runs are not available in the current runtime.</span></div>
+          </section>
+          <section class="home-panel">
+            <div class="home-panel-header"><div><span class="panel-kicker">Timeline</span><h2>Recent Activity</h2></div></div>
+            <div class="dashboard-empty"><strong>No activity data connected</strong><span>Verified workspace activity will appear here when available.</span></div>
+          </section>
+        </div>
       </div>
+    </section>
 
+    <section id="command" class="page">
+      <div class="tom-work-surface">
+        <div class="tom-header center-chat-header">
+          <span class="tom-symbol" aria-hidden="true">T</span>
+          <div class="tom-heading">
+            <strong class="tom-title">Command</strong>
+            <span class="tom-context" id="tomContext">Project: Drop</span>
+          </div>
+          <button class="tom-text-button" id="tomNewChat" type="button">New chat</button>
+          <button class="tom-icon-button" id="tomHistoryToggle" type="button" aria-label="Toggle conversation history" aria-expanded="false" title="Conversation history">◷</button>
+        </div>
+
+        <section class="tom-history" id="tomHistory" aria-label="Conversation history" aria-hidden="true">
+          <div class="tom-history-header">
+            <div>
+              <strong>Conversations</strong>
+              <span>Recent chats on this device</span>
+            </div>
+            <button class="tom-icon-button" id="tomHistoryClose" type="button" aria-label="Close conversation history" title="Close">×</button>
+          </div>
+          <div class="tom-history-list" id="tomHistoryList"></div>
+        </section>
+
+        <section class="tom-chat-shell" aria-label="Tom chat">
+          <div class="tom-quick-actions" id="tomActions">
+            <button class="quick-actions-toggle" id="quickActionsToggle" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="quickActionsMenu">Quick Actions <span class="quick-actions-caret" aria-hidden="true">▾</span></button>
+            <div class="quick-actions-menu" id="quickActionsMenu" role="menu" aria-label="Quick actions" hidden>
+              <div class="quick-actions-group">
+                <div class="quick-actions-group-title">Project</div>
+                <button type="button" role="menuitem" data-action="chat" data-prompt="Show my tasks for today.">Show my tasks for today</button>
+                <button type="button" role="menuitem" data-action="chat" data-prompt="Check workspace health and summarize the current status.">Check workspace health</button>
+                <button type="button" role="menuitem" data-action="chat" data-prompt="Check the pipeline status and summarize the current state.">Check pipeline status</button>
+                <button type="button" role="menuitem" data-action="chat" data-prompt="Find the relevant project documentation for this workspace.">Find project documentation</button>
+                <button type="button" role="menuitem" data-action="chat" data-prompt="Explain the project architecture based on the available project files.">Explain project architecture</button>
+                <button type="button" role="menuitem" data-action="chat" data-prompt="Search the project and summarize the relevant files you find.">Search project</button>
+              </div>
+              <div class="quick-actions-group">
+                <div class="quick-actions-group-title">Code</div>
+                <button type="button" role="menuitem" data-action="file" data-question="Analyze this file and explain what it does, its key responsibilities, and anything important to know.">Analyze current file</button>
+                <button type="button" role="menuitem" data-action="file" data-question="Summarize this file concisely.">Summarize current file</button>
+                <button type="button" role="menuitem" data-action="file" data-question="Explain the selected code in this file.">Explain selected code</button>
+                <button type="button" role="menuitem" data-action="file" data-question="Find files in the project related to this file and explain how they relate.">Find related files</button>
+                <button type="button" role="menuitem" data-action="file" data-question="Trace the main function or functions in this file and describe the execution flow.">Trace this function</button>
+                <button type="button" role="menuitem" data-action="file" data-question="List the dependencies used by this file and what each is used for.">Find dependencies</button>
+                <button type="button" role="menuitem" data-action="file" data-question="Find the API endpoints defined or used in this file.">Find API endpoints</button>
+                <button type="button" role="menuitem" data-action="file" data-question="Review this code for correctness, risks, and improvements.">Review code</button>
+              </div>
+              <div class="quick-actions-group">
+                <div class="quick-actions-group-title">Debug</div>
+                <button type="button" role="menuitem" data-action="chat" data-prompt="Help me explain an error I am seeing and how to investigate it.">Explain an error</button>
+                <button type="button" role="menuitem" data-action="file" data-question="Find potential bugs or edge cases in this file.">Find potential bugs</button>
+                <button type="button" role="menuitem" data-action="chat" data-prompt="Help me trace an issue in this project. What details do you need from me?">Trace an issue</button>
+              </div>
+              <div class="quick-actions-group">
+                <div class="quick-actions-group-title">Operations</div>
+                <button type="button" role="menuitem" data-action="chat" data-prompt="Check the recent changes in this project and summarize them.">Check recent changes</button>
+                <button type="button" role="menuitem" data-action="chat" data-prompt="Suggest the next steps for this project.">Suggest next steps</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="tom-messages" id="tomMessages" aria-live="polite"></div>
+          <div class="tom-composer-status" id="tomResponse">Tom is ready.</div>
+
+          <form class="tom-composer" id="tomComposer">
+            <div class="tom-context-chips" id="tomContextChips" hidden></div>
+            <div class="composer-box">
+              <textarea id="tomInput" rows="1" placeholder="Ask Tom about your project..." aria-label="Message Tom"></textarea>
+              <button id="tomSendButton" type="submit" disabled>Send</button>
+            </div>
+            <span class="composer-hint">Enter to send · Shift+Enter for a new line</span>
+          </form>
+        </section>
+      </div>
     </section>
 
 
-    <!-- PLACEHOLDER NAVIGATION PAGES -->
     <section id="work" class="page">
-      <h1>My Work</h1>
-      <p>Your assigned project work will appear here.</p>
+      <div class="empty-page">
+        <span class="empty-page-label">Control</span>
+        <h1>Approvals</h1>
+        <p>Approval requests will appear here when provided by the existing approval flow.</p>
+      </div>
+    </section>
+
+    <section id="workflows" class="page">
+      <div class="empty-page"><span class="empty-page-label">Workspace</span><h1>Workflows</h1><p>No workflows are available.</p></div>
+    </section>
+
+    <section id="runtime" class="page">
+      <div class="empty-page"><span class="empty-page-label">Operations</span><h1>Runtime</h1><p>No runtime data is available.</p></div>
+    </section>
+
+    <section id="logs" class="page">
+      <div class="empty-page"><span class="empty-page-label">Operations</span><h1>Logs</h1><p>No logs are available.</p></div>
+    </section>
+
+    <section id="metrics" class="page">
+      <div class="empty-page"><span class="empty-page-label">Operations</span><h1>Metrics</h1><p>No metrics are available.</p></div>
     </section>
 
     <section id="workspace" class="page">
@@ -508,11 +356,6 @@
           <span id="workspaceStatusDetail">Reading project…</span>
         </div>
       </div>
-      <div class="shift-status">
-        <strong id="workspaceStatus">Loading</strong>
-        <span id="workspaceStatusDetail">Reading project…</span>
-      </div>
-
       <!-- PROJECT SUMMARY -->
       <section class="card workspace-summary-card">
         <div class="card-header">
@@ -575,20 +418,27 @@
     </section>
 
     <section id="team" class="page">
-      <h1>Team</h1>
-      <p>Project members, roles, responsibilities and ownership.</p>
+      <div class="empty-page"><span class="empty-page-label">Orchestration</span><h1>Agents</h1><p>No agent roster is available.</p></div>
     </section>
 
-        <section id="activity" class="page">
-      <h1>Activity</h1>
-      <p>Verified project execution and evidence history.</p>
+    <section id="activity" class="page">
+      <div class="empty-page"><span class="empty-page-label">Control</span><h1>Activity</h1><p>No activity evidence is available.</p></div>
     </section>
 
-    <!-- MARKETPLACE -->
+    <section id="settings" class="page">
+      <div class="empty-page"><h1>Settings</h1><p>No workspace settings are available in this phase.</p></div>
+    </section>
+
     <section id="marketplace" class="page">
       <div class="page-heading">
-        <h1>Plugin Marketplace</h1>
-        <span class="status-dot healthy" title="Catalog ready"></span>
+        <div>
+          <h1>Connections</h1>
+          <p>Available and installed project integrations.</p>
+        </div>
+        <div class="connection-page-links" aria-label="Connection views">
+          <button class="text-button active" type="button" data-open-page="marketplace">Available</button>
+          <button class="text-button" type="button" data-open-page="installed">Installed</button>
+        </div>
       </div>
 
       <div class="marketplace-controls">
@@ -663,10 +513,13 @@
     <section id="installed" class="page">
       <div class="page-heading">
         <div>
-          <h1>Installed</h1>
+          <h1>Installed Connections</h1>
           <p>Project-scoped integrations and their current lifecycle state.</p>
         </div>
-        <span class="project-scope-label">Project Alpha</span>
+        <div class="connection-page-links" aria-label="Connection views">
+          <button class="text-button" type="button" data-open-page="marketplace">Available</button>
+          <button class="text-button active" type="button" data-open-page="installed">Installed</button>
+        </div>
       </div>
       <div class="installed-summary" id="installedSummary"></div>
       <div class="installed-grid" id="installedGrid">
@@ -701,95 +554,37 @@
 
   <div class="tom-divider" id="tomDivider" role="separator" aria-orientation="vertical" aria-label="Resize Tom panel" tabindex="0"></div>
 
-  <!-- TOM ASSISTANT -->
+  <!-- TASK INTELLIGENCE -->
   <aside class="tom-panel" id="tomPanel">
-
     <div class="tom-header">
-      <span class="tom-symbol" aria-hidden="true">T</span>
       <div class="tom-heading">
-        <strong class="tom-title">Tom</strong>
-        <span class="tom-context" id="tomContext">Project: Drop</span>
+        <strong class="tom-title">Task Intelligence</strong>
+        <span class="tom-context">Current task context</span>
       </div>
-      <button class="tom-text-button" id="tomNewChat" type="button">New chat</button>
-      <button class="tom-icon-button" id="tomHistoryToggle" type="button" aria-label="Toggle conversation history" aria-expanded="false" title="Conversation history">◷</button>
-      <button class="tom-icon-button" id="tomCollapse" type="button" aria-label="Collapse Tom" title="Collapse">›</button>
+      <button class="tom-icon-button" id="tomCollapse" type="button" aria-label="Collapse task intelligence" title="Collapse">›</button>
     </div>
 
     <div class="tom-panel-body">
-
-      <section class="tom-history" id="tomHistory" aria-label="Conversation history" aria-hidden="true">
-        <div class="tom-history-header">
-          <div>
-            <strong>Conversations</strong>
-            <span>Recent chats on this device</span>
-          </div>
-          <button class="tom-icon-button" id="tomHistoryClose" type="button" aria-label="Close conversation history" title="Close">×</button>
+      <section class="tom-intelligence" aria-label="Task intelligence">
+        <div class="intelligence-tab-row" role="tablist" aria-label="Task intelligence views">
+          <button class="intelligence-tab active" type="button" role="tab" aria-selected="true" data-tab="plan">PLAN</button>
+          <button class="intelligence-tab" type="button" role="tab" aria-selected="false" data-tab="evidence">EVIDENCE</button>
+          <button class="intelligence-tab" type="button" role="tab" aria-selected="false" data-tab="tools">TOOLS</button>
         </div>
-        <div class="tom-history-list" id="tomHistoryList"></div>
-      </section>
-
-      <section class="tom-chat-shell" aria-label="Tom chat">
-        <div class="tom-quick-actions" id="tomActions">
-          <button class="quick-actions-toggle" id="quickActionsToggle" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="quickActionsMenu">Quick Actions <span class="quick-actions-caret" aria-hidden="true">▾</span></button>
-          <div class="quick-actions-menu" id="quickActionsMenu" role="menu" aria-label="Quick actions" hidden>
-            <div class="quick-actions-group">
-              <div class="quick-actions-group-title">Project</div>
-              <button type="button" role="menuitem" data-action="chat" data-prompt="Show my tasks for today.">Show my tasks for today</button>
-              <button type="button" role="menuitem" data-action="chat" data-prompt="Check workspace health and summarize the current status.">Check workspace health</button>
-              <button type="button" role="menuitem" data-action="chat" data-prompt="Check the pipeline status and summarize the current state.">Check pipeline status</button>
-              <button type="button" role="menuitem" data-action="chat" data-prompt="Find the relevant project documentation for this workspace.">Find project documentation</button>
-              <button type="button" role="menuitem" data-action="chat" data-prompt="Explain the project architecture based on the available project files.">Explain project architecture</button>
-              <button type="button" role="menuitem" data-action="chat" data-prompt="Search the project and summarize the relevant files you find.">Search project</button>
-            </div>
-            <div class="quick-actions-group">
-              <div class="quick-actions-group-title">Code</div>
-              <button type="button" role="menuitem" data-action="file" data-question="Analyze this file and explain what it does, its key responsibilities, and anything important to know.">Analyze current file</button>
-              <button type="button" role="menuitem" data-action="file" data-question="Summarize this file concisely.">Summarize current file</button>
-              <button type="button" role="menuitem" data-action="file" data-question="Explain the selected code in this file.">Explain selected code</button>
-              <button type="button" role="menuitem" data-action="file" data-question="Find files in the project related to this file and explain how they relate.">Find related files</button>
-              <button type="button" role="menuitem" data-action="file" data-question="Trace the main function or functions in this file and describe the execution flow.">Trace this function</button>
-              <button type="button" role="menuitem" data-action="file" data-question="List the dependencies used by this file and what each is used for.">Find dependencies</button>
-              <button type="button" role="menuitem" data-action="file" data-question="Find the API endpoints defined or used in this file.">Find API endpoints</button>
-              <button type="button" role="menuitem" data-action="file" data-question="Review this code for correctness, risks, and improvements.">Review code</button>
-            </div>
-            <div class="quick-actions-group">
-              <div class="quick-actions-group-title">Debug</div>
-              <button type="button" role="menuitem" data-action="chat" data-prompt="Help me explain an error I am seeing and how to investigate it.">Explain an error</button>
-              <button type="button" role="menuitem" data-action="file" data-question="Find potential bugs or edge cases in this file.">Find potential bugs</button>
-              <button type="button" role="menuitem" data-action="chat" data-prompt="Help me trace an issue in this project. What details do you need from me?">Trace an issue</button>
-            </div>
-            <div class="quick-actions-group">
-              <div class="quick-actions-group-title">Operations</div>
-              <button type="button" role="menuitem" data-action="chat" data-prompt="Check the recent changes in this project and summarize them.">Check recent changes</button>
-              <button type="button" role="menuitem" data-action="chat" data-prompt="Suggest the next steps for this project.">Suggest next steps</button>
-            </div>
-          </div>
+        <div class="intelligence-panel active" role="tabpanel" data-panel="plan" id="planPanel">
+          <div class="intelligence-empty">No execution plan for this task yet.</div>
         </div>
-
-        <div class="tom-messages" id="tomMessages" aria-live="polite"></div>
-
-        <div class="tom-composer-status" id="tomResponse">Tom is ready.</div>
-
-        <form class="tom-composer" id="tomComposer">
-          <div class="tom-context-chips" id="tomContextChips" hidden></div>
-          <div class="composer-box">
-            <textarea
-              id="tomInput"
-              rows="1"
-              placeholder="Ask Tom about your project..."
-              aria-label="Message Tom"
-            ></textarea>
-            <button id="tomSendButton" type="submit" disabled>Send</button>
-          </div>
-          <span class="composer-hint">Enter to send · Shift+Enter for a new line</span>
-        </form>
+        <div class="intelligence-panel" role="tabpanel" data-panel="evidence">
+          <div class="intelligence-empty">No evidence is available for this conversation.</div>
+        </div>
+        <div class="intelligence-panel" role="tabpanel" data-panel="tools">
+          <div class="intelligence-empty">No tool activity is available for this conversation.</div>
+        </div>
       </section>
-
     </div>
-
   </aside>
 
-  <button class="tom-open-toggle" id="tomOpenToggle" type="button" aria-label="Open Tom" title="Open Tom" aria-controls="tomPanel" aria-expanded="false">Tom</button>
+  <button class="tom-open-toggle" id="tomOpenToggle" type="button" aria-label="Open task intelligence" title="Open task intelligence" aria-controls="tomPanel" aria-expanded="false">Details</button>
 
 
   <script src="/topology.js"></script>

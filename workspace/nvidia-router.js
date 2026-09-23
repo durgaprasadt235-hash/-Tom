@@ -28,7 +28,7 @@ async function askNvidia(messages, options = {}) {
           body: JSON.stringify({
             model,
             messages,
-            max_tokens: 1000,
+            max_tokens: Number.isInteger(options.maxTokens) ? options.maxTokens : 1000,
             chat_template_kwargs: { thinking: false },
             ...(typeof options.temperature === "number" ? { temperature: options.temperature } : {})
           })
