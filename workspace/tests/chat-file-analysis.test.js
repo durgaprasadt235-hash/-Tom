@@ -9,8 +9,11 @@ const {
   planGitTools,
   planVscodeTools,
   planFileAnalysis,
+  planProjectDiscovery,
+  createExecutionPlan,
   extractExplicitFilePath
 } = require('../tools/chat-tool-planner');
+const { executePlan } = require('../tools/agent-runtime');
 
 const PROJECT_ID = 'drop';
 const CLIENT_INSTANCE_ID = 'tom-test-client-file-analysis';
@@ -100,6 +103,42 @@ test('planFileAnalysis selects active mode for "review the active file"', () => 
 test('planFileAnalysis returns null for normal chat that does not need a file', () => {
   assert.equal(planFileAnalysis('What is the weather like today?'), null);
   assert.equal(planFileAnalysis('Hi Tom, how are you?'), null);
+});
+
+test('project discovery starts with the tree and selects existing Home candidates', async () => {
+  const message = 'Inspect the Drop project and tell me what component implements the main Home page. Do not modify anything.';
+  const projectPlan = planProjectDiscovery(message);
+  const executionPlan = createExecutionPlan(message);
+  const calls = [];
+  const evidence = await executePlan(executionPlan, async (tool, args) => {
+    calls.push({ tool, args });
+    if (tool === 'vscode.workspace.tree') {
+      return { success: true, data: { tree: [{ path: 'web/app/page.tsx', type: 'file' }] } };
+    }
+    return { success: true, data: { path: args.path, content: 'export default function Home() {}' } };
+  });
+
+  assert.equal(projectPlan.intent, 'inspect_project');
+  assert.deepEqual(calls, [
+    { tool: 'vscode.workspace.tree', args: {} },
+    { tool: 'vscode.file.read', args: { path: 'web/app/page.tsx' } }
+  ]);
+  assert.deepEqual(evidence.map((item) => item.tool), ['vscode.workspace.tree', 'vscode.file.read']);
+  assert.equal(executionPlan.steps[0].tool, 'vscode.workspace.tree');
+});
+
+test('project discovery does not read guessed files absent from the tree', async () => {
+  const executionPlan = createExecutionPlan(
+    'Find the component that implements the main Home page in the repository.'
+  );
+  const calls = [];
+  const evidence = await executePlan(executionPlan, async (tool, args) => {
+    calls.push({ tool, args });
+    return { success: true, data: { tree: [{ path: 'web/components/Other.tsx', type: 'file' }] } };
+  });
+
+  assert.deepEqual(calls, [{ tool: 'vscode.workspace.tree', args: {} }]);
+  assert.deepEqual(evidence.map((item) => item.tool), ['vscode.workspace.tree']);
 });
 
 test('planGitTools and planVscodeTools are unaffected by file analysis wording', () => {

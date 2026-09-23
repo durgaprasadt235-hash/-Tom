@@ -35,6 +35,23 @@ function resolveArgs(step, evidence) {
 async function executePlan(plan, executeTool) {
   const evidence = [];
   for (const step of plan.steps) {
+    if (step.candidatePathsFrom) {
+      const dependency = evidence.find((item) => item.tool === step.candidatePathsFrom && item.success);
+      const availablePaths = new Set(dependency?.data?.tree
+        ?.filter((entry) => entry && entry.type === "file")
+        .map((entry) => entry.path) || []);
+      const candidatePaths = (step.candidatePaths || []).filter((candidate) => availablePaths.has(candidate));
+      for (const candidatePath of candidatePaths) {
+        const result = await executeTool(step.tool, { path: candidatePath });
+        evidence.push({
+          tool: step.tool,
+          args: { path: candidatePath },
+          success: !!(result && result.success),
+          data: result && result.success ? result.data : { error: (result && result.error) || "Tool execution failed" }
+        });
+      }
+      continue;
+    }
     const args = resolveArgs(step, evidence);
     if (args === null) {
       evidence.push({ tool: step.tool, args: step.args || {}, success: false, data: { error: `Dependency unavailable: ${step.dependsOn}` } });

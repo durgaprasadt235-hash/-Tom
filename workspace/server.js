@@ -1107,44 +1107,26 @@ app.post("/tools/execute", async (req, res) => {
 // ---------------------------------------
 
 app.get("/health", (req, res) => {
-  const nvidiaConfigured =
-    Boolean(
-      process.env.NVIDIA_API_KEY
-    );
+  const health = buildWorkspaceHealth('drop', {
+    projectRegistry,
+    pluginManager,
+    vscodeBridge,
+    env: process.env
+  });
 
+  const statusCode = health.status === 'ok' ? 200 : 503;
+  return res.status(statusCode).json(formatWorkspaceHealthResponse(health));
+});
 
-  return res
-    .status(
-      nvidiaConfigured
-        ? 200
-        : 503
-    )
-    .json({
-      status:
-        nvidiaConfigured
-          ? "ok"
-          : "degraded",
+app.get('/projects/:projectId/health', requireKnownProject, (req, res) => {
+  const health = buildWorkspaceHealth(req.params.projectId, {
+    projectRegistry,
+    pluginManager,
+    vscodeBridge,
+    env: process.env
+  });
 
-      tomServer:
-        "connected",
-
-      intelligenceGateway:
-        nvidiaConfigured
-          ? "configured"
-          : "missing-api-key",
-
-      provider:
-        "nvidia-direct",
-
-      router:
-        "enabled",
-
-      project:
-        "DROP",
-
-      projectRoot:
-        DROP_ROOT
-    });
+  return res.status(health.status === 'ok' ? 200 : 503).json(formatWorkspaceHealthResponse(health));
 });
 
 
@@ -1158,6 +1140,21 @@ const pluginRegistry = require('./plugins/registry/plugin-registry');
 const pluginManager = require('./plugins/runtime/plugin-manager');
 const projectRegistry = require('./plugins/runtime/project-registry');
 const vscodeBridge = require('./plugins/vscode/vscode-bridge');
+const { buildWorkspaceHealth } = require('./plugins/runtime/workspace-health');
+
+function formatWorkspaceHealthResponse(health) {
+  return {
+    ...health,
+    tomServer: 'connected',
+    provider: 'nvidia-direct',
+    router: {
+      enabled: true,
+      configured: health.providers.nvidiaDirect.configured,
+      status: health.providers.nvidiaDirect.status
+    },
+    currentProject: health.project
+  };
+}
 
 function requireKnownProject(req, res, next) {
   if (!projectRegistry.validateProjectId(req.params.projectId)) {

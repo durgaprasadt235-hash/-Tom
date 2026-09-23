@@ -117,29 +117,55 @@ async function runWorkspaceHealthCheck() {
   healthButton.disabled = true;
   healthButton.textContent = "Checking...";
 
-  healthSummary.textContent =
-    "Checking Tom frontend...";
+  healthSummary.textContent = "Checking workspace connections...";
 
   connections.forEach((connection) => {
     const status = connection.querySelector(".connection-status");
-
-    status.textContent = "Status unavailable";
+    status.textContent = "Checking...";
   });
 
   try {
-    const response = await fetch("/");
-
+    const response = await fetch("/health");
     if (!response.ok) {
-      throw new Error("Tom backend unavailable");
+      throw new Error("Workspace health unavailable");
     }
 
-    healthSummary.textContent =
-      "Tom frontend reachable";
+    const health = await response.json();
+    const summaryText = health.status === "ok"
+      ? "Workspace healthy"
+      : "Workspace degraded";
+
+    healthSummary.textContent = summaryText;
+
+    const rows = Array.from(document.querySelectorAll(".health-row"));
+    const rowMap = new Map(rows.map((row) => [row.dataset.connection, row]));
+
+    const updateRow = (label, connected, detail) => {
+      const row = rowMap.get(label);
+      if (!row) return;
+      const status = row.querySelector(".connection-status");
+      status.textContent = connected ? "Connected" : detail;
+      status.classList.toggle("warning", !connected);
+      status.classList.toggle("healthy", connected);
+    };
+
+    updateRow("Development Environment", health.project?.connected, health.project?.connected ? "Project connected" : "Not connected");
+  updateRow("NVIDIA Direct", health.providers?.nvidiaDirect?.configured, health.providers?.nvidiaDirect?.configured ? "NVIDIA Direct configured" : "Missing NVIDIA configuration");
+    updateRow("File Server", health.providers?.vscode?.connected, health.providers?.vscode?.connected ? "VS Code bridge connected" : "VS Code disconnected");
+
+    ["Source Database", "Message Queue", "Scheduler"].forEach((label) => {
+      const row = rowMap.get(label);
+      if (!row) return;
+      row.querySelector(".connection-status").textContent = "Not configured";
+      row.querySelector(".connection-status").classList.add("neutral");
+    });
 
   } catch (error) {
-    healthSummary.textContent =
-      "Tom frontend unavailable";
-
+    healthSummary.textContent = "Workspace health unavailable";
+    connections.forEach((connection) => {
+      const status = connection.querySelector(".connection-status");
+      status.textContent = "Unavailable";
+    });
   } finally {
     healthButton.disabled = false;
     healthButton.textContent = "Run Health Check";

@@ -87,6 +87,47 @@ function planCodeInspection(message) {
   };
 }
 
+const PROJECT_DISCOVERY_VERBS = /\b(inspect|search|find|locate)\b/i;
+const PROJECT_DISCOVERY_CONTEXT = /\b(project|repository|repo|codebase)\b/i;
+
+function projectDiscoveryCandidates(message) {
+  const text = String(message || "").toLowerCase();
+  if (/\b(home|home page|homepage|main page)\b/.test(text)) {
+    return [
+      "web/app/page.tsx",
+      "web/app/page.jsx",
+      "web/app/page.js",
+      "web/pages/index.tsx",
+      "web/src/pages/Home.tsx",
+      "web/src/pages/Home.jsx",
+      "src/pages/Home.tsx",
+      "src/pages/Home.jsx",
+      "src/App.tsx",
+      "src/App.jsx"
+    ];
+  }
+  return [];
+}
+
+function planProjectDiscovery(message) {
+  const text = String(message || "");
+  if (!PROJECT_DISCOVERY_VERBS.test(text) || !PROJECT_DISCOVERY_CONTEXT.test(text)) return null;
+  return {
+    intent: "inspect_project",
+    candidates: projectDiscoveryCandidates(text),
+    steps: [
+      { tool: "vscode.workspace.tree", args: {}, riskLevel: "read" },
+      {
+        tool: "vscode.file.read",
+        args: {},
+        candidatePathsFrom: "vscode.workspace.tree",
+        candidatePaths: projectDiscoveryCandidates(text),
+        riskLevel: "read"
+      }
+    ]
+  };
+}
+
 function planVerification(message) {
   const text = String(message || "").toLowerCase();
   if (/\bnpm\s+run\s+build\b|\b(?:run|verify|check|make sure)\b[^.]*\bbuild\b[^.]*\b(pass|passes|passing)?\b/.test(text)) {
@@ -196,6 +237,8 @@ function planEditApproval(message, pendingApprovalId = null) {
 
 function createExecutionPlan(message) {
   const filePlan = planFileAnalysis(message);
+  const projectPlan = !filePlan ? planProjectDiscovery(message) : null;
+  if (projectPlan) return projectPlan;
   const vscodeTools = filePlan && filePlan.mode === "explicit" ? [] : planVscodeTools(message);
   const plannedTools = [...new Set([...planGitTools(message), ...vscodeTools])];
   const steps = plannedTools.map((tool) => ({ tool, args: {}, riskLevel: "read" }));
@@ -242,6 +285,7 @@ module.exports = {
   planGitTools,
   planVscodeTools,
   planFileAnalysis,
+  planProjectDiscovery,
   planCodeInspection,
   planVerification,
   planPostEditVerification,
