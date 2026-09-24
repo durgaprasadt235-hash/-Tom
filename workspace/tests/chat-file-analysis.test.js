@@ -141,6 +141,63 @@ test('project discovery does not read guessed files absent from the tree', async
   assert.deepEqual(evidence.map((item) => item.tool), ['vscode.workspace.tree']);
 });
 
+test('implementation questions use tree-grounded search and bounded reads', async () => {
+  const cases = [
+    {
+      message: 'Which files control Clubrooms?',
+      paths: ['web/components/Clubrooms.tsx', 'web/hooks/useClubrooms.ts'],
+      terms: 'clubrooms'
+    },
+    {
+      message: 'Where is login implemented?',
+      paths: ['web/app/login/page.tsx'],
+      terms: 'login'
+    },
+    {
+      message: 'How does the Drop creation flow work?',
+      paths: ['web/components/CreateDrop.tsx', 'web/actions/create-drop.ts'],
+      terms: 'drop creation'
+    },
+    {
+      message: 'What component handles messages?',
+      paths: ['web/components/Messages.tsx'],
+      terms: 'messages'
+    }
+  ];
+
+  for (const testCase of cases) {
+    const plan = createExecutionPlan(testCase.message);
+    const calls = [];
+    const evidence = await executePlan(plan, async (tool, args) => {
+      calls.push({ tool, args });
+      if (tool === 'vscode.workspace.tree') {
+        return { success: true, data: { tree: testCase.paths.map((path) => ({ path, type: 'file' })) } };
+      }
+      if (tool === 'vscode.workspace.search') {
+        return { success: true, data: { matches: testCase.paths.map((path, index) => ({ path, score: testCase.paths.length - index })) } };
+      }
+      return { success: true, data: { path: args.path, content: `export function ${args.path}() {}` } };
+    });
+
+    assert.equal(plan.intent, 'inspect_project');
+    assert.equal(plan.steps[0].tool, 'vscode.workspace.tree');
+    assert.equal(plan.steps[1].tool, 'vscode.workspace.search');
+    assert.equal(plan.steps[1].args.query, testCase.terms);
+    assert.deepEqual(calls.map((call) => call.tool), [
+      'vscode.workspace.tree',
+      'vscode.workspace.search',
+      ...testCase.paths.map(() => 'vscode.file.read')
+    ]);
+    assert.ok(evidence.length > 0);
+    assert.deepEqual(
+      evidence.filter((item) => item.tool === 'vscode.file.read').map((item) => item.args.path),
+      testCase.paths
+    );
+    assert.ok(evidence.every((item) => !item.args.path || testCase.paths.includes(item.args.path)));
+    if (testCase.terms === 'clubrooms') assert.deepEqual(plan.candidates, []);
+  }
+});
+
 test('planGitTools and planVscodeTools are unaffected by file analysis wording', () => {
   assert.deepEqual(planGitTools('what changed recently?'), []);
   assert.deepEqual(planVscodeTools('what file am I working on?'), ['vscode.file.active']);

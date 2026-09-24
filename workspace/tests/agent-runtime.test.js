@@ -117,15 +117,18 @@ test('verification intent maps only to approved command definitions', () => {
     command: 'npm run build',
     cwd: 'web'
   });
-  assert.deepEqual(planVerification('Please run npm test'), { command: 'npm test', cwd: 'web' });
+  // Drop's package.json defines no "test" script, so the planner must refuse it
+  // (policy verifies scripts exist before selection).
+  assert.equal(planVerification('Please run npm test'), null);
   assert.deepEqual(planVerification('Run npm run lint'), { command: 'npm run lint', cwd: 'web' });
   assert.equal(planVerification('Run curl and tell me the result'), null);
 });
 
-test('combined edit and build request includes read-only terminal verification', () => {
+test('combined edit and build request marks terminal verification as consequential', () => {
   const plan = createExecutionPlan('Clean up unused code in web/app/page.tsx and make sure the build still passes.');
   assert.equal(plan.steps.some((step) => step.tool === 'terminal.run' && step.args.command === 'npm run build'), true);
-  assert.equal(plan.steps.some((step) => step.riskLevel !== 'read'), false);
+  // Builds mutate artifacts, so the verification step is consequential, not read-only.
+  assert.equal(plan.steps.some((step) => step.riskLevel !== 'read'), true);
 });
 
 test('post-edit verification distinguishes stored and fresh build evidence', () => {

@@ -3,7 +3,8 @@ const gitTool = require("./git-tool");
 const pluginManager = require("../plugins/runtime/plugin-manager");
 const vscodeBridge = require("../plugins/vscode/vscode-bridge");
 const activityTracker = require("../plugins/runtime/activity-tracker");
-const terminalRunner = require("./terminal-runner");
+const { createRuntimeGateway, TOOLS: RUNTIME_TOOLS } = require("./runtime-controller");
+const runtimeGateway = createRuntimeGateway({ root: require("../agent").DROP_ROOT });
 
 const VSCODE_PROJECT_ID = "drop";
 
@@ -12,22 +13,13 @@ const STATIC_TOOLS = {
   "git.branch": { name: "git.branch", description: "List branches in the authorized Drop repository", capability: "repository.branch", riskLevel: "read", handler: gitTool.branch },
   "git.log": { name: "git.log", description: "Get commit history of the authorized Drop repository", capability: "repository.log", riskLevel: "read", handler: gitTool.log },
   "git.diff": { name: "git.diff", description: "Show file differences in the authorized Drop repository", capability: "repository.diff", riskLevel: "read", handler: gitTool.diff },
-  "terminal.run": {
-    name: "terminal.run",
-    description: "Run one allowlisted verification command inside the authorized Drop project",
-    capability: "terminal.run",
-    riskLevel: "read",
-    requiresArgs: true,
-    handler: (args) => {
-      if (!args || typeof args.command !== "string") throw new Error("A 'command' argument (string) is required");
-      return terminalRunner.run(args.command, args.cwd || "web");
-    }
-  }
+
 };
 
 const VSCODE_TOOLS = {
   "vscode.workspace.info": { name: "vscode.workspace.info", description: "Describe the authorized VS Code workspace", capability: "vscode.workspace.info", riskLevel: "read", handler: () => vscodeBridge.workspaceInfo(VSCODE_PROJECT_ID) },
   "vscode.workspace.tree": { name: "vscode.workspace.tree", description: "List the safe authorized project tree", capability: "vscode.workspace.tree", riskLevel: "read", handler: () => vscodeBridge.workspaceTree(VSCODE_PROJECT_ID) },
+  "vscode.workspace.search": { name: "vscode.workspace.search", description: "Search authorized project files for implementation terms", capability: "vscode.workspace.search", riskLevel: "read", requiresArgs: true, handler: (args) => vscodeBridge.searchWorkspace(VSCODE_PROJECT_ID, args && args.query) },
   "vscode.file.active": { name: "vscode.file.active", description: "Get the active authorized VS Code file if available", capability: "vscode.file.active", riskLevel: "read", handler: () => vscodeBridge.activeFile(VSCODE_PROJECT_ID) },
   "vscode.diagnostics": { name: "vscode.diagnostics", description: "Get diagnostics reported by the local VS Code bridge", capability: "vscode.diagnostics", riskLevel: "read", handler: () => vscodeBridge.diagnostics(VSCODE_PROJECT_ID) },
   "vscode.file.changes": { name: "vscode.file.changes", description: "Get recent authorized file-save events reported by the local VS Code bridge", capability: "vscode.file.changes", riskLevel: "read", handler: () => vscodeBridge.fileChanges(VSCODE_PROJECT_ID) },
@@ -91,12 +83,16 @@ function currentRegistry() {
 }
 
 function getRegisteredTools(capabilityFilter = null) {
-  return Object.values(currentRegistry())
+  return [...Object.values(currentRegistry()), ...runtimeGateway.getRegisteredTools()]
     .filter((tool) => !capabilityFilter || tool.capability === capabilityFilter)
     .map(({ name, description, capability, riskLevel }) => ({ name, description, capability, riskLevel }));
 }
 
 async function executeTool(toolName, args) {
+  if (RUNTIME_TOOLS.includes(toolName)) return runtimeGateway.executeTool(toolName, args);
+  if (typeof toolName !== "string" || !Object.hasOwn(currentRegistry(), toolName)) {
+    return { success: false, tool: toolName, error: "Tool not found or unavailable" };
+  }
   const tool = currentRegistry()[toolName];
   if (!tool) return { success: false, tool: toolName, error: `Tool not found or unavailable: ${toolName}` };
   // Read-only by default. "approved_write" is a narrow, explicit exception
@@ -122,5 +118,5 @@ async function executeTool(toolName, args) {
   }
 }
 
-module.exports = { getRegisteredTools, executeTool, activityTracker };
+module.exports = { getRegisteredTools, executeTool, activityTracker, shutdown: runtimeGateway.shutdown };
 

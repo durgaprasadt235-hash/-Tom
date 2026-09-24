@@ -89,6 +89,19 @@ function planCodeInspection(message) {
 
 const PROJECT_DISCOVERY_VERBS = /\b(inspect|search|find|locate)\b/i;
 const PROJECT_DISCOVERY_CONTEXT = /\b(project|repository|repo|codebase)\b/i;
+const PROJECT_IMPLEMENTATION_PATTERNS = [
+  /\b(?:which|what)\s+(?:files?|components?)\b[^?]*\b(?:control|controls|implement|implements|handle|handles|define|defines)\b/i,
+  /\bwhere\b[^?]*\b(?:implemented|defined|handled|located)\b/i,
+  /\bwhat\b[^?]*\bcomponent\b[^?]*\b(?:handles|controls|implements)\b/i,
+  /\bhow does\b[^?]*\b(?:flow|work|works|happen|happens)\b/i,
+  /\btrace\b[^?]*\b(?:flow|work|happen|happens|button|action|pressed)\b/i,
+  /\b(?:trace|identify)\b[^?]*\b(?:files?|components?|callbacks?|view.?state|navigation|transition(?:s)?|screen(?:s)?)\b/i
+];
+const PROJECT_SEARCH_STOP_WORDS = new Set([
+  "which", "what", "where", "how", "does", "do", "is", "are", "the", "a", "an", "in", "on", "for", "to", "of",
+  "file", "files", "component", "components", "project", "repository", "repo", "codebase", "implemented", "defined", "handled",
+  "handles", "control", "controls", "flow", "work", "works", "happen", "happens", "when", "pressed", "button", "trace", "tell", "me"
+]);
 
 function projectDiscoveryCandidates(message) {
   const text = String(message || "").toLowerCase();
@@ -109,37 +122,56 @@ function projectDiscoveryCandidates(message) {
   return [];
 }
 
+function deriveProjectSearchTerms(message) {
+  return [...new Set(String(message || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9_.-]+/g, " ")
+    .split(/\s+/)
+    .filter((term) => term.length >= 3 && !PROJECT_SEARCH_STOP_WORDS.has(term)))]
+    .slice(0, 6)
+    .join(" ");
+}
+
 function planProjectDiscovery(message) {
   const text = String(message || "");
-  if (!PROJECT_DISCOVERY_VERBS.test(text) || !PROJECT_DISCOVERY_CONTEXT.test(text)) return null;
+  if (!(PROJECT_DISCOVERY_VERBS.test(text) && PROJECT_DISCOVERY_CONTEXT.test(text)) && !PROJECT_IMPLEMENTATION_PATTERNS.some((pattern) => pattern.test(text))) return null;
+  const candidates = projectDiscoveryCandidates(text);
+  const searchTerms = deriveProjectSearchTerms(text);
+  const steps = [{ tool: "vscode.workspace.tree", args: {}, riskLevel: "read" }];
+  if (candidates.length) {
+    steps.push({
+      tool: "vscode.file.read",
+      args: {},
+      candidatePathsFrom: "vscode.workspace.tree",
+      candidatePaths: candidates,
+      riskLevel: "read"
+    });
+  } else {
+    steps.push({ tool: "vscode.workspace.search", args: { query: searchTerms }, riskLevel: "read" });
+    steps.push({
+      tool: "vscode.file.read",
+      args: {},
+      candidatePathsFrom: "vscode.workspace.search",
+      candidatePathsAllowedBy: "vscode.workspace.tree",
+      maxCandidates: 12,
+      riskLevel: "read"
+    });
+  }
   return {
     intent: "inspect_project",
-    candidates: projectDiscoveryCandidates(text),
-    steps: [
-      { tool: "vscode.workspace.tree", args: {}, riskLevel: "read" },
-      {
-        tool: "vscode.file.read",
-        args: {},
-        candidatePathsFrom: "vscode.workspace.tree",
-        candidatePaths: projectDiscoveryCandidates(text),
-        riskLevel: "read"
-      }
-    ]
+    candidates,
+    searchTerms,
+    steps
   };
 }
 
 function planVerification(message) {
-  const text = String(message || "").toLowerCase();
-  if (/\bnpm\s+run\s+build\b|\b(?:run|verify|check|make sure)\b[^.]*\bbuild\b[^.]*\b(pass|passes|passing)?\b/.test(text)) {
-    return { command: "npm run build", cwd: "web" };
-  }
-  if (/\bnpm\s+test\b|\b(?:run|verify|check)\b[^.]*\btests?\b/.test(text)) {
-    return { command: "npm test", cwd: "web" };
-  }
-  if (/\bnpm\s+run\s+lint\b|\b(?:run|verify|check)\b[^.]*\blint\b/.test(text)) {
-    return { command: "npm run lint", cwd: "web" };
-  }
-  return null;
+  const intent = require("./runtime-intent").classify(message);
+  if (intent?.tool !== "terminal.run") return null;
+  try {
+    require("./command-policy").command(require("../agent").DROP_ROOT, intent.args.cwd, intent.args.command);
+    return intent.args;
+  } catch { return null; }
 }
 
 function planPostEditVerification(message) {
@@ -258,7 +290,7 @@ function createExecutionPlan(message) {
     });
   }
   if (verification) {
-    steps.push({ tool: "terminal.run", args: verification, riskLevel: "read" });
+    steps.push({ tool: "terminal.run", args: verification, riskLevel: "consequential" });
   }
 
   const hasGit = steps.some((step) => step.tool.startsWith("git."));
@@ -286,6 +318,7 @@ module.exports = {
   planVscodeTools,
   planFileAnalysis,
   planProjectDiscovery,
+  deriveProjectSearchTerms,
   planCodeInspection,
   planVerification,
   planPostEditVerification,

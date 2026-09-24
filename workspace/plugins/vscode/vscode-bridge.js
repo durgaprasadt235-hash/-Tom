@@ -3,7 +3,7 @@ const { spawn } = require("child_process");
 
 const path = require("path");
 const fs = require("fs");
-const { getProjectTree, readProjectFile, writeProjectFile } = require("../../agent");
+const { getProjectTree, searchProjectFiles, readProjectFile, writeProjectFile } = require("../../agent");
 const { getProject } = require("../runtime/project-registry");
 const { detectVSCode } = require("./vscode-plugin");
 const editApprovals = require("../../tools/edit-approval-store");
@@ -200,6 +200,13 @@ function workspaceTree(projectId) {
   return { projectId, project: project.name, source: "project_filesystem", ...getProjectTree(project.root) };
 }
 
+function searchWorkspace(projectId, query) {
+  requireSession(projectId);
+  if (typeof query !== "string" || !query.trim()) throw new Error("A search query is required");
+  const project = getProject(projectId);
+  return { projectId, project: project.name, source: "project_filesystem", ...searchProjectFiles(query.slice(0, 200)) };
+}
+
 function activeFile(projectId) {
   const { session } = requireSession(projectId);
   return session.activeFile
@@ -283,7 +290,7 @@ function applyEdit(projectId, approvalId, relativePath) {
 
 module.exports = {
   detectVSCode, beginHandshake, getChallenge, acceptHandshake, heartbeat,
-  getConnection, disconnect, launchLocalBridge, waitForConnection, workspaceInfo, workspaceTree,
+  getConnection, disconnect, launchLocalBridge, waitForConnection, workspaceInfo, workspaceTree, searchWorkspace,
   activeFile, diagnostics, fileChanges, readFile, proposeEdit, applyEdit
 };
 

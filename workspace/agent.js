@@ -181,6 +181,34 @@ function getProjectTree(dir, currentDepth) {
   return result;
 }
 
+function searchProjectFiles(query) {
+  const terms = String(query || "")
+    .toLowerCase()
+    .split(/[^a-z0-9_.-]+/)
+    .filter((term) => term.length >= 2)
+    .slice(0, 6);
+  if (!terms.length) return { query: String(query || ""), matches: [] };
+
+  const matches = [];
+  for (const entry of getProjectTree(DROP_ROOT).tree) {
+    if (entry.type !== "file") continue;
+    const pathText = entry.path.toLowerCase();
+    let score = terms.reduce((total, term) => total + (pathText.includes(term) ? 3 : 0), 0);
+    if (!score) {
+      try {
+        const content = readProjectFile(entry.path).toLowerCase();
+        score = terms.reduce((total, term) => total + (content.includes(term) ? 1 : 0), 0);
+      } catch {
+        score = 0;
+      }
+    }
+    if (score) matches.push({ path: entry.path, score });
+  }
+
+  matches.sort((left, right) => right.score - left.score || left.path.localeCompare(right.path));
+  return { query: String(query || ""), matches: matches.slice(0, 20) };
+}
+
 // --------------------------------------------------
 // LIST DROP PROJECT FILES (top level only)
 // --------------------------------------------------
@@ -304,40 +332,7 @@ function getProjectFileInfo(relativePath) {
 // CONTROLLED TERMINAL EXECUTION
 // --------------------------------------------------
 
-const { spawn } = require("child_process");
 const crypto = require("crypto");
-
-// Allowed commands for controlled execution
-const ALLOWED_COMMANDS = new Set([
-  "pwd",
-  "ls",
-  "find",
-  "git",
-  "npm",
-  "node"
-]);
-
-// Allowed npm subcommands
-const ALLOWED_NPM_SUBCOMMANDS = new Set([
-  "run",
-  "test"
-]);
-
-// Allowed node flags (limited to safe ones)
-const ALLOWED_NODE_FLAGS = new Set([
-  "--check"
-]);
-
-// Shell operators to reject
-const SHELL_OPERATORS = [
-  ";",
-  "&",
-  "|",
-  ">",
-  "<",
-  "$(",
-  "`"
-];
 
 // Execution limits
 const MAX_EXECUTION_TIME = 5000; // 5 seconds
@@ -405,210 +400,9 @@ function updateMetrics(success, latencyIncrement = 0) {
   metrics.totalLatency += latencyIncrement;
 }
 
-/**
- * Validate that a command is allowed and safe
- */
-function validateCommand(command) {
-  if (!command || typeof command !== "string") {
-    throw new Error("Command must be a non-empty string");
-  }
-
-  // Check for shell operators
-  for (const operator of SHELL_OPERATORS) {
-    if (command.includes(operator)) {
-      throw new Error(`Shell operator "${operator}" is not allowed`);
-    }
-  }
-
-  // Split command into parts
-  const parts = command.trim().split(/\s+/);
-  if (parts.length === 0) {
-    throw new Error("Empty command");
-  }
-
-  const baseCommand = parts[0];
-
-  // Check if base command is allowed
-  if (!ALLOWED_COMMANDS.has(baseCommand)) {
-    throw new Error(`Command "${baseCommand}" is not allowed`);
-  }
-
-  // Additional validation for specific commands
-  switch (baseCommand) {
-    case "npm":
-      if (parts.length < 2) {
-        throw new Error("npm command requires a subcommand");
-      }
-      const npmSubcommand = parts[1];
-      if (!ALLOWED_NPM_SUBCOMMANDS.has(npmSubcommand)) {
-        throw new Error(`npm subcommand "${npmSubcommand}" is not allowed`);
-      }
-      // Additional validation for npm run - check if it's a valid script
-      if (npmSubcommand === "run" && parts.length < 3) {
-        throw new Error("npm run requires a script name");
-      }
-      break;
-
-    case "node":
-      // Only allow specific flags
-      for (let i = 1; i < parts.length; i++) {
-        const part = parts[i];
-        if (part.startsWith("-") && !ALLOWED_NODE_FLAGS.has(part)) {
-          throw new Error(`Node flag "${part}" is not allowed`);
-        }
-        // Disallow any scripts that aren't just syntax checking
-        if (!part.startsWith("-") && i === parts.length - 1) {
-          // Last argument should be a file to check
-          if (!part.endsWith(".js") && !part.endsWith(".ts")) {
-            throw new Error("Node can only check .js or .ts files");
-          }
-        }
-      }
-      break;
-
-    case "git":
-      // Only allow specific git subcommands
-      const allowedGitSubcommands = new Set(["status", "diff", "log"]);
-      if (parts.length < 2) {
-        throw new Error("Git command requires a subcommand");
-      }
-      const gitSubcommand = parts[1];
-      if (!allowedGitSubcommands.has(gitSubcommand)) {
-        throw new Error(`Git subcommand "${gitSubcommand}" is not allowed`);
-      }
-      break;
-
-    default:
-      // pwd, ls, find are allowed as-is with no arguments validation for now
-      break;
-  }
-
-  return {
-    command: baseCommand,
-    args: parts.slice(1)
-  };
-}
-
-/**
- * Execute a controlled command
- */
-function executeControlledCommand(commandString) {
-  const startTime = Date.now();
-  const requestId = generateRequestId();
-
-  try {
-    const { command, args } = validateCommand(commandString);
-    
-    // Ensure we're using spawn with proper options
-    const child = spawn(command, args, {
-      cwd: DROP_ROOT,
-      timeout: MAX_EXECUTION_TIME,
-      maxBuffer: MAX_OUTPUT_SIZE,
-      env: {
-        // Minimal environment to avoid leaking secrets
-        PATH: process.env.PATH,
-        HOME: process.env.HOME,
-        // Only pass essential vars
-        ...(process.env.NODE_ENV ? { NODE_ENV: process.env.NODE_ENV } : {})
-      }
-    });
-
-    let stdout = "";
-    let stderr = "";
-    let timedOut = false;
-
-    // Handle output with size limits
-    child.stdout.on("data", (data) => {
-      stdout += data.toString("utf8");
-      if (stdout.length > MAX_OUTPUT_SIZE) {
-        timedOut = true;
-        child.kill();
-        stdout = stdout.substring(0, MAX_OUTPUT_SIZE) + "\n[OUTPUT TRUNCATED]";
-      }
-    });
-
-    child.stderr.on("data", (data) => {
-      stderr += data.toString("utf8");
-      if (stderr.length > MAX_OUTPUT_SIZE) {
-        timedOut = true;
-        child.kill();
-        stderr = stderr.substring(0, MAX_OUTPUT_SIZE) + "\n[OUTPUT TRUNCATED]";
-      }
-    });
-
-    return new Promise((resolve, reject) => {
-      child.on("close", (code) => {
-        const duration = Date.now() - startTime;
-        const success = code === 0 && !timedOut;
-        
-        // Update metrics
-        metrics.commandExecutions++;
-        if (!success) {
-          metrics.commandFailures++;
-        }
-        
-        // Record audit event
-        recordAuditEvent(
-          "execute",
-          commandString,
-          success,
-          duration,
-          !success && code !== null ? `Exit code: ${code}` : timedOut ? "Timeout" : null
-        );
-
-        resolve({
-          command: commandString,
-          exitCode: code,
-          stdout,
-          stderr,
-          duration,
-          timedOut,
-          success
-        });
-      });
-
-      child.on("error", (err) => {
-        const duration = Date.now() - startTime;
-        
-        // Update metrics
-        metrics.commandExecutions++;
-        metrics.commandFailures++;
-        
-        // Record audit event
-        recordAuditEvent(
-          "execute",
-          commandString,
-          false,
-          duration,
-          err.message
-        );
-
-        reject({
-          command: commandString,
-          error: err.message,
-          duration,
-          success: false
-        });
-      });
-    });
-  } catch (err) {
-    const duration = Date.now() - startTime;
-    
-        // Update metrics
-        metrics.commandExecutions++;
-        metrics.commandFailures++;
-    
-    // Record audit event
-    recordAuditEvent(
-      "execute",
-      commandString,
-      false,
-      duration,
-      err.message
-    );
-
-    throw err;
-  }
+// Legacy entry point deliberately fails closed; no alternate spawn path.
+function executeControlledCommand() {
+  throw new Error("Direct execution disabled; use Action Gateway terminal.run and execution.approve");
 }
 
 /**
@@ -752,6 +546,7 @@ module.exports = {
   readProjectFile,
   getProjectFileInfo,
   getProjectTree,
+  searchProjectFiles,
   executeControlledCommand,
   writeProjectFile,
   getAuditEvents,

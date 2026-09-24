@@ -93,6 +93,14 @@ test('vscode.file.read is registered when the bridge is connected', () => {
   assert.ok(tools.includes('vscode.file.read'));
 });
 
+test('vscode.workspace.search is registered and stays within the authorized project', async () => {
+  const tools = actionGateway.getRegisteredTools().map((t) => t.name);
+  assert.ok(tools.includes('vscode.workspace.search'));
+  const result = await actionGateway.executeTool('vscode.workspace.search', { query: 'page' });
+  assert.equal(result.success, true);
+  assert.ok(result.data.matches.every((match) => !match.path.startsWith('..')));
+});
+
 test('executeTool("vscode.file.read", { path }) succeeds end-to-end', async () => {
   const result = await actionGateway.executeTool('vscode.file.read', { path: 'web/app/page.tsx' });
   assert.equal(result.success, true);

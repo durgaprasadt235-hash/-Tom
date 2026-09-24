@@ -37,10 +37,18 @@ async function executePlan(plan, executeTool) {
   for (const step of plan.steps) {
     if (step.candidatePathsFrom) {
       const dependency = evidence.find((item) => item.tool === step.candidatePathsFrom && item.success);
-      const availablePaths = new Set(dependency?.data?.tree
+      const treeEvidence = step.candidatePathsAllowedBy
+        ? evidence.find((item) => item.tool === step.candidatePathsAllowedBy && item.success)
+        : dependency;
+      const availablePaths = new Set(treeEvidence?.data?.tree
         ?.filter((entry) => entry && entry.type === "file")
         .map((entry) => entry.path) || []);
-      const candidatePaths = (step.candidatePaths || []).filter((candidate) => availablePaths.has(candidate));
+      const dependencyPaths = dependency?.data?.matches?.map((match) => match.path) || [];
+      const candidates = step.candidatePaths || dependencyPaths;
+      const candidatePaths = candidates
+        .filter((candidate) => !treeEvidence || availablePaths.has(candidate))
+        .filter((candidate) => !step.candidatePathsFrom || dependencyPaths.length === 0 || dependencyPaths.includes(candidate))
+        .slice(0, step.maxCandidates || 6);
       for (const candidatePath of candidatePaths) {
         const result = await executeTool(step.tool, { path: candidatePath });
         evidence.push({

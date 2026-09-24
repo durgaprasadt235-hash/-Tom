@@ -25,6 +25,8 @@ const {
   getProjectFileInfo
 } = require("./agent");
 
+const runtimeIntent = require("./tools/runtime-intent");
+
 const app = express();
 
 app.use(express.json({ limit: "2mb" }));
@@ -122,6 +124,7 @@ function boundEvidenceData(data) {
 function verificationReply(result) {
   if (!result.success) return "Verification could not run: " + result.error;
   const data = result.data;
+  if (data.status === "pending_approval") return runtimeIntent.render(result);
   const status = data.exitCode === 0 && !data.timedOut ? "passed" : "failed";
   return [
     `Verification ${status}: ${data.command}`,
@@ -172,6 +175,19 @@ app.post("/chat", async (req, res) => {
 
       Validate them before sending them to the model.
     */
+
+    const runtimeRequest = runtimeIntent.classify(message);
+    // Preserve combined edit/proposal behavior; execution remains separately approved.
+    const combinedEdit = planEditProposal(message) || planExplicitReplacement(message) || planPostEditVerification(message);
+    if (runtimeRequest && !combinedEdit) {
+      const evidence = await actionGateway.executeTool(runtimeRequest.tool, runtimeRequest.args);
+      return res.json({ reply: runtimeIntent.render(evidence), provider: "tom-action-gateway",
+        toolsUsed: [runtimeRequest.tool], toolActivity: ["Processing " + runtimeRequest.tool],
+        toolEvidence: [{ tool: runtimeRequest.tool, args: runtimeRequest.args, ...evidence }],
+        executionPlan: { intent: runtimeRequest.tool, steps: [{ ...runtimeRequest,
+          riskLevel: runtimeRequest.tool === "terminal.discover" || /\.(status|logs|health|port)$/.test(runtimeRequest.tool) ? "read" : "consequential" }] }
+      });
+    }
 
     const safeHistory = sanitizeAndBoundHistory(history);
     const pendingApprovalId = findPendingApprovalId(safeHistory);
@@ -545,7 +561,7 @@ app.post("/chat", async (req, res) => {
         provider: "tom-action-gateway",
         executionPlan: {
           intent: "verify_project",
-          steps: [{ tool: "terminal.run", args: verification, riskLevel: "read" }]
+          steps: [{ tool: "terminal.run", args: verification, riskLevel: "consequential" }]
         },
         toolEvidence: [{
           tool: "terminal.run",
@@ -694,11 +710,15 @@ app.post("/chat", async (req, res) => {
         "\n----- END CURRENT-TURN ACTION GATEWAY EVIDENCE -----\n" +
         "Rules for this answer:\n" +
         "1. Treat only the current-turn evidence above as authoritative for mutable project state.\n" +
-        "2. Present repository facts as facts (for example a short fact list).\n" +
+        "2. Present repository facts as facts only when directly supported by current-turn evidence.\n" +
         "3. Previous assistant claims about Git, files, diagnostics, or repository state are not current facts.\n" +
         "4. Clearly separate current evidence from explanation or inference.\n" +
         "5. Do not claim you executed anything beyond these read-only checks.\n" +
-        "6. Answer the user's question directly. Do NOT narrate or analyze the " +
+        "6. Never describe a file's contents, purpose, behavior, exports, components, or implementation unless vscode.file.read successfully read that file in the current turn.\n" +
+        "7. Files returned only by vscode.workspace.search are search matches, not inspected files. List unread matches separately as 'Additional search matches not inspected in this turn' and do not infer their role from filenames.\n" +
+        "8. Never claim no other files were found unless the search evidence itself contains no additional matches.\n" +
+        "9. If successful repository evidence does not verify the requested fact, say that you could not verify it; never invent a path, component, implementation, or relationship between files.\n" +
+        "10. Answer the user's question directly. Do NOT narrate or analyze the " +
         "conversation, the instructions, or the tool results. Do NOT start with " +
         "sections like 'Analyze User Input' or any step-by-step reasoning. " +
         "Begin directly with the repository facts."
