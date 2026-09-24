@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TOM Cloud</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 48px 24px; text-align: center; }
+    main { max-width: 560px; margin: 0 auto; }
+    .card { border: 1px solid #ccc; border-radius: 12px; padding: 16px; margin: 12px 0; text-align: left; }
+    .ok { color: green; }
+    code { font-size: 0.9em; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>TOM Cloud</h1>
+    <p>Secure cloud surface for the TOM web experience. Local execution stays on your machine with the TOM Local Agent.</p>
+
+    <div class="card">
+      <strong>Cloud health:</strong> <span id="health">checking…</span>
+    </div>
+    <div class="card">
+      <strong>Auth:</strong> <span id="auth">checking…</span><br />
+      <strong>Database:</strong> <span id="db">checking…</span><br />
+      <strong>Local Agent:</strong> <span id="agent">checking…</span>
+    </div>
+
+    <p><small>TOM Cloud never executes commands on your machine, never touches local files, and never exposes the local runtime.</small></p>
+  </main>
+
+  <script>
+    async function load() {
+      try {
+        const healthRes = await fetch('/api/health');
+        const health = await healthRes.json();
+        document.getElementById('health').textContent =
+          health.status === 'ok' ? 'ok (' + health.service + ' ' + health.version + ')' : 'unavailable';
+        document.getElementById('health').className = health.status === 'ok' ? 'ok' : '';
+      } catch (e) {
+        document.getElementById('health').textContent = 'unavailable';
+      }
+      try {
+        const statusRes = await fetch('/api/status');
+        const status = await statusRes.json();
+        document.getElementById('auth').textContent = String(status.auth);
+        document.getElementById('db').textContent =
+          status.database.provider + ': ' + status.database.status;
+        document.getElementById('agent').textContent = String(status.localAgent.status);
+      } catch (e) {
+        document.getElementById('auth').textContent = 'unavailable';
+        document.getElementById('db').textContent = 'unavailable';
+        document.getElementById('agent').textContent = 'unavailable';
+      }
+    }
+    load();
+  </script>
+</body>
+</html>

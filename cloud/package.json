@@ -1,0 +1,15 @@
+{
+  "name": "tom-cloud",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TOM cloud surface — safe Vercel boundary. No local runtime, no privileged tools.",
+  "type": "commonjs",
+  "scripts": {
+    "build": "node scripts/verify-boundary.js",
+    "test": "node --test tests/"
+  },
+  "dependencies": {},
+  "engines": {
+    "node": ">=18"
+  }
+}
