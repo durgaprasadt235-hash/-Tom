@@ -8,7 +8,9 @@
     "build": "node scripts/verify-boundary.js",
     "test": "node --test tests/"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@neondatabase/serverless": "^1.1.0"
+  },
   "engines": {
     "node": ">=18"
   }
