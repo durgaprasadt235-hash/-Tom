@@ -434,6 +434,9 @@ No ROI figures are claimed here; this is a description of intended value, not a 
 | Edit approval workflow | IMPLEMENTED | UUID, 5-min TTL, single-use, source-hash stale detection |
 | Controlled file writes | IMPLEMENTED | Only `vscode.file.apply_edit`, gated on a consumed approval |
 | Action Gateway / tool registry | IMPLEMENTED | Static registry with `read` / `approved_write` risk levels |
+| Controlled terminal execution (`terminal.run`) | IMPLEMENTED | Exact-string command allowlist, `shell: false`, package-script check, approval-gated |
+| Runtime control (`runtime.start/stop/restart`) | IMPLEMENTED | Owned process groups, port/readiness proof (`lsof`), bounded logs, cancellation; whole-message service grammar ("Start the DROP development server.") routes deterministically, unknown service/port/PID wording is default-denied with zero model calls |
+| Cloud deployment boundary (`cloud/`) | PARTIAL | Safe Vercel surface (`/api/health`, `/api/status`, Neon status probe) with a fail-closed boundary verifier; no terminal/runtime/filesystem/VS Code tools. Not deployed |
 | Response sanitization | IMPLEMENTED | Strips leaked model reasoning/chain-of-thought |
 | Topology visualization (UI) | IMPLEMENTED | SVG graph of project/plugin nodes and edges, pan/zoom/persist |
 | Activity tracking | IMPLEMENTED | In-memory operation lifecycle, bounded to last 50 events |
@@ -457,10 +460,13 @@ Tom **cannot currently**:
 - Operate against more than one project/root at a time (the authorized project root is hardcoded).
 - Connect to GitHub, Jira, Databricks, AWS, Azure, GCP, or any database/CI/CD/monitoring system — these exist only as declarative manifests.
 - Enforce role-based access control — no role provider exists.
-- Run outside a single developer's local machine — there is no hosted, multi-tenant, or on-prem deployment yet.
+- Run outside a single developer's local machine — there is no hosted deployment of the local runtime. `cloud/` is a deliberately narrow Vercel boundary (health/status plus a database reachability probe) with no terminal, runtime, filesystem, VS Code, or tool-execution capability, and it is not deployed yet.
 - Autonomously execute a data migration, deployment, or any multi-step operation without per-step human approval.
 - Guarantee model availability — the NVIDIA fallback chain reduces but does not eliminate the risk of all providers failing simultaneously.
-- Test its own AI fallback behavior — there are currently no automated tests covering the multi-model fallback path or full end-to-end chat flow.
+- Ensure a *code* change takes effect without a restart — routing decisions live in the running process, so a TOM server started before a change keeps the old behaviour until it is restarted (this is what produced the observed "start the DROP development server" model-prose bug).
+- Test its own AI fallback behavior — the ordered NVIDIA model chain itself is not exercised by automated tests; the `/chat` integration tests stub it and assert it is never reached for deterministic runtime or execution intents.
+- Manage more than one runtime service — exactly one service is configured (`projectId: drop`, `serviceId: web`, port 5173, health `/`). Additional services require trusted factory configuration in `createRuntimeGateway`, never chat input; any other service id, project name, port or PID is refused deterministically.
+- Treat a *question* about service operations as an execution request — only imperative clauses ("start the DROP development server") route or deny; "How do I start a server?" remains a model-answered question with no execution and no approval.
 
 ## 22. Roadmap
 

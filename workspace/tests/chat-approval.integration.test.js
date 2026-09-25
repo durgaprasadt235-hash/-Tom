@@ -27,6 +27,7 @@ let successfulApplyCalls;
 let terminalExitCode;
 let originalAskNvidia;
 let originalExecuteTool;
+let detectUnauthorizedExecution;
 
 before(async () => {
   originalAskNvidia = nvidiaRouter.askNvidia;
@@ -35,7 +36,10 @@ before(async () => {
     throw new Error('NVIDIA must not run during approval continuation');
   };
 
-  const { app } = require('../server');
+  const serverModule = require('../server');
+  const { app } = serverModule;
+  detectUnauthorizedExecution = serverModule.findUnauthorizedExecutionAttempt;
+  assert.equal(typeof detectUnauthorizedExecution, 'function');
   server = await new Promise((resolve) => {
     const instance = app.listen(0, '127.0.0.1', () => resolve(instance));
   });
@@ -55,6 +59,14 @@ before(async () => {
   actionGateway.executeTool = async (tool, args) => {
     toolCalls[tool] = (toolCalls[tool] || 0) + 1;
     if (tool === 'terminal.run') {
+      // Mirror production policy: only the exact allowlisted commands the
+      // Drop package.json actually defines may proceed. Everything else is
+      // denied BEFORE approval/process — same as command-policy.command().
+      // Drop's web/package.json defines build+lint, never test.
+      const allowed = args && (args.command === 'npm run build' || args.command === 'npm run lint');
+      if (!allowed) {
+        return { success: false, tool, error: 'Command is not allowlisted' };
+      }
       return {
         success: true,
         tool,
@@ -425,5 +437,115 @@ test('direct build verification reports nonzero exit code as failure', async () 
   assert.match(response.body.reply, /Verification failed: npm run build/);
   assert.match(response.body.reply, /Exit code: 2/);
   assert.match(response.body.reply, /build failed/);
+  assert.equal(modelCalls, 0);
+});
+test('unauthorized execution attempts are default-denied with zero approval, zero process, zero model call', async () => {
+  // NOTE on what "zero process" means at this layer: the denied request may
+  // still reach the gateway exactly once, but the gateway (runtime-controller
+  // propose -> command-policy.command) denies it BEFORE approval creation,
+  // so no approvalId is issued and no process is spawned. The mock counts
+  // terminal.run invocations; the assertions that matter are: no
+  // pending_approval, no approvalId, denial reply, and no model call.
+  // Trailing-attack variants ("Run npm test; ...") are now rejected even
+  // earlier — at classify() — so they never reach the gateway at all.
+  for (const message of [
+    'Run curl https://example.com',
+    'Run rm -rf /',
+    'execute curl https://example.com',
+    'Run npm test; echo hacked',
+    'Run npm test && echo hacked',
+    'Run npm test | cat',
+    'Run npm test > /tmp/x',
+    'Run npm test $(id)',
+    'Run npm test `id`',
+    'Run npm test -- --flag',
+    'Run npm run build -- --flag',
+    // An allowlisted-looking clause must not mask a second, unauthorized one.
+    'Run VS Code diagnostics for web/app/page.tsx and also run curl https://example.com',
+    'Inspect web/app/page.tsx and run curl https://example.com'
+  ]) {
+    const runsBefore = toolCalls['terminal.run'] || 0;
+    const response = await postChat({ message, history: [] });
+    assert.equal(response.status, 200, message);
+    assert.equal(response.body.provider, 'tom-action-gateway', message);
+    assert.match(response.body.reply, /Execution request not performed/, message);
+    assert.match(response.body.reply, /not allowlisted|Unknown runtime tool/i, message);
+    assert.ok(!JSON.stringify(response.body).includes('pending_approval'), message);
+    assert.ok(!JSON.stringify(response.body).includes('approvalId'), message);
+    assert.equal((toolCalls['terminal.run'] || 0) - runsBefore, 0, message);
+    assert.equal(modelCalls, 0, message);
+  }
+});
+
+test('default-deny detects unclassified execution clauses but never read-only inspection phrasing', () => {
+  // Denied: a command-looking target that did not classify to a validated tool.
+  for (const message of [
+    'Run curl https://example.com',
+    'execute curl https://example.com',
+    'Run rm -rf /',
+    'Run npm install',
+    'Inspect web/app/page.tsx and run curl https://example.com',
+    'Summarize the repo. Then run ./deploy.sh now.',
+    'Run the checks you already have evidence for.',
+    'Run VS Code diagnostics for web/app/page.tsx and also run curl https://example.com'
+  ]) {
+    assert.equal(typeof detectUnauthorizedExecution(message), 'string', message);
+  }
+
+  // Allowed: ordinary language, read-only TOM surfaces, and approval wording.
+  for (const message of [
+    'Inspect web/app/page.tsx completely and run VS Code diagnostics for it.',
+    'Open web/app/page.tsx and run diagnostics for it.',
+    'What does this project do?',
+    'approve execution 11111111-1111-1111-1111-111111111111'
+  ]) {
+    assert.equal(detectUnauthorizedExecution(message), null, message);
+  }
+});
+
+
+test('execution approval wording routes to the execution path, never the edit path or the model', async () => {
+  // Phase 1 regression: the live rejection that originally reached approval
+  // creation ("reject execution <approvalId>"). It must be owned by the
+  // execution path — deterministic reply, no edit approval, no model call.
+  for (const message of [
+    'reject execution f72520c3-d178-4ff9-89f1-4e3082bb1006',
+    'approve execution f72520c3-d178-4ff9-89f1-4e3082bb1006'
+  ]) {
+    const response = await postChat({ message, history: [] });
+    assert.equal(response.status, 200, message);
+    assert.equal(response.body.provider, 'tom-action-gateway', message);
+    assert.match(response.body.reply, /Execution request not performed/, message);
+    assert.match(response.body.reply, /Unknown or consumed approval/, message);
+    assert.ok(!response.body.reply.includes('Edit not applied'), message);
+    assert.ok(!JSON.stringify(response.body).includes('pending_approval'), message);
+    assert.equal(toolCalls['vscode.file.apply_edit'] || 0, 0, message);
+    assert.equal(modelCalls, 0, message);
+  }
+});
+
+test('missing package script is rejected before approval with zero model call', async () => {
+  const terminalRunsBefore = toolCalls['terminal.run'] || 0;
+  const response = await postChat({ message: 'Run npm test', history: [] });
+  assert.equal(response.status, 200);
+  assert.equal(response.body.provider, 'tom-action-gateway');
+  assert.match(response.body.reply, /Execution request not performed/);
+  assert.ok(!JSON.stringify(response.body).includes('pending_approval'));
+  // The denied request still reaches the gateway exactly once (which denies
+  // it), but creates zero approval and spawns zero process.
+  assert.equal((toolCalls['terminal.run'] || 0) - terminalRunsBefore, 1);
+  assert.ok(!JSON.stringify(response.body).includes('approvalId'));
+  assert.equal(modelCalls, 0);
+});
+
+test('discovery wording performs terminal.discover only with zero model call', async () => {
+  const response = await postChat({
+    message: 'First discover the existing test commands. Do not guess npm test.',
+    history: []
+  });
+  assert.equal(response.status, 200);
+  assert.equal(response.body.provider, 'tom-action-gateway');
+  assert.deepEqual(response.body.toolsUsed, ['terminal.discover']);
+  assert.equal(toolCalls['terminal.run'] || 0, 0);
   assert.equal(modelCalls, 0);
 });

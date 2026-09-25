@@ -16,13 +16,19 @@ async function askNvidia(messages, options = {}) {
   for (const model of MODELS) {
     try {
       const response = await fetch(
-        "https://integrate.api.nvidia.com/v1/chat/completions",
+        // TOM_MODEL_BASE_URL lets a black-box acceptance run point the REAL
+        // server at a local model stub. Unset in production.
+        (typeof process !== "undefined" && process.env && process.env.TOM_MODEL_BASE_URL
+          ? String(process.env.TOM_MODEL_BASE_URL).trim()
+          : "https://integrate.api.nvidia.com/v1/chat/completions"),
         {
           method: "POST",
           headers: {
             Authorization: `Bearer ${apiKey}`,
             "Content-Type": "application/json"
           },
+          // Pause/Stop aborts the in-flight model call at the safe boundary.
+          signal: options.signal || undefined,
           // Ask reasoning-capable models (e.g. nemotron) to skip emitting a
           // visible thinking trace. Unsupported models ignore this field.
           body: JSON.stringify({
@@ -48,6 +54,9 @@ async function askNvidia(messages, options = {}) {
       };
 
     } catch (error) {
+      // An aborted call is a deliberate task-control action (Pause/Stop):
+      // never fall through to the next model — propagate immediately.
+      if (options.signal && options.signal.aborted) throw error;
       console.log(`⚠️ ${model}: ${error.message}`);
     }
   }
@@ -55,4 +64,4 @@ async function askNvidia(messages, options = {}) {
   throw new Error("All NVIDIA models failed");
 }
 
-module.exports = { askNvidia };
+module.exports = { askNvidia, MODELS };

@@ -4,7 +4,25 @@ const pluginManager = require("../plugins/runtime/plugin-manager");
 const vscodeBridge = require("../plugins/vscode/vscode-bridge");
 const activityTracker = require("../plugins/runtime/activity-tracker");
 const { createRuntimeGateway, TOOLS: RUNTIME_TOOLS } = require("./runtime-controller");
-const runtimeGateway = createRuntimeGateway({ root: require("../agent").DROP_ROOT });
+
+// Trusted application configuration (same class as PORT / TOM_ATTACHMENT_DIR):
+// black-box acceptance runs boot the REAL managed service on a free fixture
+// port instead of a hard-coded 5173. Tool arguments and model output can
+// never reach this — it is factory config, validated once at startup.
+function configuredWebPort() {
+  const raw = process.env.TOM_RUNTIME_WEB_PORT;
+  if (raw === undefined || raw === "") return 5173;
+  const port = Number(raw);
+  if (!Number.isSafeInteger(port) || port < 1024 || port > 65535) {
+    throw new Error("TOM_RUNTIME_WEB_PORT must be an integer between 1024 and 65535");
+  }
+  return port;
+}
+
+const runtimeGateway = createRuntimeGateway({
+  root: require("../agent").DROP_ROOT,
+  services: { web: { cwd: "web", host: "localhost", port: configuredWebPort(), healthPath: "/" } }
+});
 
 const VSCODE_PROJECT_ID = "drop";
 
@@ -88,8 +106,8 @@ function getRegisteredTools(capabilityFilter = null) {
     .map(({ name, description, capability, riskLevel }) => ({ name, description, capability, riskLevel }));
 }
 
-async function executeTool(toolName, args) {
-  if (RUNTIME_TOOLS.includes(toolName)) return runtimeGateway.executeTool(toolName, args);
+async function executeTool(toolName, args, context = {}) {
+  if (RUNTIME_TOOLS.includes(toolName)) return runtimeGateway.executeTool(toolName, args, context);
   if (typeof toolName !== "string" || !Object.hasOwn(currentRegistry(), toolName)) {
     return { success: false, tool: toolName, error: "Tool not found or unavailable" };
   }
@@ -118,5 +136,23 @@ async function executeTool(toolName, args) {
   }
 }
 
-module.exports = { getRegisteredTools, executeTool, activityTracker, shutdown: runtimeGateway.shutdown };
+// Task-control plane passthroughs: Stop cancels task-bound approvals and
+// terminates TOM-owned commands without creating a new approval.
+function cancelTaskApprovals(taskId) {
+  return runtimeGateway.cancelTaskApprovals(taskId);
+}
+
+function cancelOwnedExecution(executionId) {
+  return runtimeGateway.cancelOwnedExecution(executionId);
+}
+
+function openApp() {
+  return runtimeGateway.getBrowserTarget();
+}
+
+function getBrowserTarget() {
+  return runtimeGateway.getBrowserTarget();
+}
+
+module.exports = { getRegisteredTools, executeTool, cancelTaskApprovals, cancelOwnedExecution, openApp, getBrowserTarget, activityTracker, shutdown: runtimeGateway.shutdown };
 

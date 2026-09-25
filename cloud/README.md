@@ -19,7 +19,20 @@ The deployable cloud surface. Deliberately separate from `workspace/`
   (Vercel-Neon integration), runs `SELECT 1` with a 5s timeout, maps every
   outcome to the status enum. Never logs, throws, or returns credentials.
 - `scripts/verify-boundary.js` — runs as `npm run build` (also on Vercel);
-  fails closed if any privileged reference enters the bundle.
+  fails closed if any privileged reference enters the bundle. It bans the
+  whole Phase 1 privileged stack: `terminal.*` / `runtime.*` /
+  `execution.*` tools, `child_process`, process signals, the local module
+  names (`action-gateway`, `runtime-controller`, `process-supervisor`,
+  `command-policy`, `runtime-intent`, `terminal-runner`,
+  `edit-approval-store`, `patch-validator`, `task-evidence-store`,
+  `nvidia-router`, `agent-runtime`, `code-inspection-runtime`), VS Code and
+  Git tool ids (`vscode.file.*`, `git.status`, `git.diff`), the local-only
+  endpoints (`/chat`, `/project`, `/analyze-file`, `/plugins`, `/tools`),
+  `express`, `dotenv`, `DROP_ROOT`, `127.0.0.1`, `workspace/`, credential
+  shapes (`nvapi-`, `BEGIN PRIVATE KEY`, `DATABASE_URL_UNPOOLED`), and any
+  cloud dependency outside the Neon driver allowlist. The ban list is pinned
+  by `tests/cloud-boundary.test.js`, so it cannot be silently weakened.
+- `tests/` — boundary regression tests.
 - `tests/` — boundary regression tests.
 
 ## What is intentionally absent

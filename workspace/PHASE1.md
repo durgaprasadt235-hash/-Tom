@@ -85,9 +85,11 @@ Structured evidence on every exit path: `reason` ∈ success | nonzero_exit | si
 ## Tests
 
 ```
-node --test workspace/tests/
+node --test workspace/tests/         # 161 tests (local runtime)
+cd cloud && node --test tests/       # 11 tests (cloud boundary)
+cd cloud && npm run build            # boundary verifier (fails closed)
 ```
-Key files: `tests/terminal-runner.test.js` (security/policy/approval/evidence, isolated fixtures), `tests/runtime-e2e.test.js` (full lifecycle + failure paths), `tests/agent-runtime.test.js`, `tests/chat-approval.integration.test.js` (HTTP + approval regression).
+Key files: `tests/terminal-runner.test.js` (security/policy/approval/evidence, isolated fixtures), `tests/runtime-e2e.test.js` (full lifecycle + failure paths), `tests/agent-runtime.test.js`, `tests/chat-approval.integration.test.js` (HTTP + approval regression), `tests/chat-code-inspection.integration.test.js` (inspection phrasing is not mistaken for an execution probe), `cloud/tests/cloud-boundary.test.js` (deployable bundle contains no privileged capability).
 
 ## Limitations
 
@@ -96,6 +98,155 @@ Key files: `tests/terminal-runner.test.js` (security/policy/approval/evidence, i
 - One managed runtime per configured service; service set is factory configuration (trusted app config), not request-supplied.
 - Readiness and health require `lsof` ownership evidence. If `lsof` is unavailable, ownership cannot be proven and the runtime fails closed as `listener_not_owned`; there is no HTTP-only fallback.
 - Logs are in-memory and bounded; they are not persisted across server restarts.
+
+## Post-Phase-1 security hardening
+
+A post-deployment audit found two live failures. Both were traced to a **stale
+running TOM process that predated Phase 1** (the deployed `/chat` handler had no
+deterministic runtime/execution branch), plus a genuine gap in the intent
+grammar. The hardening below closes the grammar gap and makes the deterministic
+termination a written, tested invariant.
+
+### 1. Deterministic results terminate the request (no model fallthrough)
+
+`/chat` now returns immediately from every deterministic branch — a routed
+runtime tool (`runtime-intent.classify`), a default-denied command probe, or an
+edit/execution approval — and those branches are marked in source as FINAL.
+A denied, rejected, or pending request therefore never builds a model request:
+
+- the model can never narrate, invent, or paraphrase an execution result;
+- the model can never receive an approval id and echo it as if it were valid.
+
+**Root cause of the corrupted model reply (verified):** in the stale process, a
+rejected execution request fell through to the NVIDIA fallback with the raw,
+unsanitized browser history (which contained the pending-approval text). The
+model then re-emitted that approval text instead of a deterministic rejection.
+Current source returns before the fallback, so this is unreachable; the
+regression tests assert `modelCalls === 0` for denied, rejected, and pending
+paths, and a live (unmocked) probe of `reject execution <id>` returns
+`Execution request not performed: Unknown or consumed approval` with
+`provider: tom-action-gateway`.
+
+### 2. Approval can never legitimize an unauthorized command
+
+`tools/runtime-intent.js` treats a recognized command phrase as valid **only if
+the tail of the message is benign**. Allowed tails: end-of-message punctuation,
+`please`, an `and/then tell|report|show|let|explain|confirm|check … me` clause,
+and an `and/to make sure the build (still) passes` clause. Every other tail
+(chaining, redirection, command substitution, backticks, a second command, or
+appended flags/arguments) returns `null`, which lands on the server's
+default-deny path: zero approval, zero process, zero model call.
+
+Closed by this rule: `Run npm test; echo hacked`, `Run npm test && echo hacked`,
+`Run npm test | cat`, `Run npm test > /tmp/x`, `Run npm test $(id)`,
+``Run npm test `id` ``, `Run npm test -- --flag`, `Run npm run build -- --flag`.
+
+Combined edit+verification messages are preserved: the `make sure the build
+still passes` branch maps to a **constant** allowlisted command (`npm run
+build`) with no arguments, so surrounding edit context (paths, quoted code such
+as `` `Drops worth opening` ``) is de-quoted and harmless, while shell operators
+or a second unrecognized execution verb (`run curl …`) still deny the whole
+message.
+
+### 3. Default-deny is clause-accurate, not keyword-broad
+
+`server.js` inspects each `run/execute/rerun` clause independently. A clause
+whose target is a read-only TOM surface (`VS Code diagnostics`, `diagnostics`,
+`checks …`) is ordinary inspection phrasing and is left to the deterministic
+inspection path — this is what keeps legitimate requests such as *"Inspect
+web/app/page.tsx completely and run VS Code diagnostics for it."* working.
+Any other unclassified target is denied, and an allowlisted-looking clause can
+no longer mask a second one (`"… diagnostics … and also run curl https://…"`
+denies).
+
+### 4. Execution wording never enters the edit branch
+
+`approve|reject execution <id>` is owned by the execution path. The edit
+approval branch is guarded so legacy edit parsing (which matches
+`approve <uuid>`) can never create or resolve an edit approval for execution
+wording — the failure that originally let an unauthorized command reach
+approval creation.
+
+### 5. Service lifecycle wording is a deterministic runtime route (live-bug fix)
+
+**Live failure:** with the running build, `Start the DROP development server.`
+returned model-generated prose (including a raw `npm run dev` suggestion)
+instead of routing to the managed runtime. The reply came back with
+`provider: nvidia-direct`, `toolsUsed: []` and no approval — i.e. it fell
+through to NVIDIA model generation.
+
+**Root cause (traced, not guessed):** the service grammar in
+`tools/runtime-intent.js` accepted only
+`(start|stop|restart|status|health|logs|port) [the] [web] [dev|development] (server|runtime)`
+as the *entire* message. The project qualifier `DROP` — the `projectId` of the
+only configured service — was not part of the grammar, so `classify()` returned
+`null`. No other deterministic branch matched either (the edit planners require
+edit verbs, and the command/execution guard only looked for `run/execute/rerun`
+clauses), so the request reached the model path. `Stop the DROP …`,
+`Restart the DROP …`, `Check the DROP … status.` and `Show DROP … logs.`
+failed identically; only the qualifier-free `start the development server`
+worked.
+
+**Fix — two layers, same invariant as the rest of Phase 1:**
+
+1. `classifyRuntimeActions()` resolves the *whole message* against the
+   configured service identity: optional `drop` project qualifier, optional
+   `web`, optional `dev`/`development`, and the `server`/`runtime` noun, plus
+   noun-first read forms (`check|show|get|display|report|view|see [me|us]
+   <subject> [status|logs|health|port]` and `status|logs|health|port of
+   <subject>`). The tool comes from the wording (`start|stop|restart` →
+   consequential, `status|logs|health|port` → read) and the argument is always
+   the **configured** `serviceId` (`web`) — never text from the message.
+2. Any other imperative service request is refused deterministically by
+   `findUnresolvedServiceRequest()` in `server.js`: zero approval, zero
+   process, zero model call. Service identity can only come from trusted
+   configuration, so `Start the ACME development server.`,
+   `Start the DROP development server on port 9999.`, `Stop process 4212`,
+   `Restart the dev server with pid 99999`, `Run npm run dev` and
+   `Start the development server and run curl https://…` all return
+   `Execution request not performed: …` with `provider: tom-action-gateway`.
+   Conversational questions (`How do I start a server?`) are not imperative
+   clauses and remain ordinary chat.
+
+**Verified live** against a temporary instance of the current source with the
+model stubbed (any fallthrough would be counted and visible):
+
+| Message | Tool | Risk | Result |
+|---|---|---|---|
+| Start the DROP development server. | `runtime.start` | consequential | `pending_approval` + `approvalId`, no process, 0 model calls |
+| Stop the DROP development server. | `runtime.stop` | consequential | `Unknown managed service` (nothing owned), no approval |
+| Restart the DROP development server. | `runtime.restart` | consequential | `pending_approval` + `approvalId`, no process |
+| Check the DROP development server status. | `runtime.status` | read | no approval, read executed against the owned-process table |
+| Show DROP development server logs. | `runtime.logs` | read | no approval, read executed against the owned-process table |
+
+**Ownership invariant:** service id, port, PID, cwd and command come from trusted
+factory configuration only (`createRuntimeGateway({ root, services })`).
+`plainArgs()` rejects every extra key, so `{ serviceId: 'web', port: 9999 }`,
+`{ serviceId: 'web', pid: 1 }` and `{ serviceId: 'web', command: 'npm run dev' }`
+fail closed, an unconfigured id (`other`) is refused for every runtime tool, and
+`runtime.stop` cannot signal anything TOM does not own. `npm run dev` remains
+unselectable through `terminal.run` (`command-policy.command()` requires the
+runtime flag).
+
+This fix only takes effect in a **new** TOM process: a server started before the
+change keeps the old grammar in memory and will still answer these phrases with
+model prose.
+
+## Chat Control Panel (Phase 1 final acceptance)
+
+Server-authoritative task lifecycle layered on `tools/task-session.js`:
+
+- **Task store** — 10-state machine (`IDLE → PLANNING → WAITING_FOR_APPROVAL → RUNNING → PAUSING/PAUSED → CANCELLING/CANCELLED → COMPLETED/FAILED`) with a validated transition table; invalid transitions throw. `controls(state)` derives every button the UI renders; `canInitiateAction()` is the fail-closed gate consulted before ANY gateway or model call in `/chat` (top of request, per plan step, immediately before each model call).
+- **Routes** — `POST /task`, `GET /task/:id`, `POST /task/:id/{pause,resume,stop,edit}`; unknown sessions 404, invalid transitions 409, and every `/chat` payload carries a fresh `task` view via a single `res.json` exit wrapper (approval-bearing responses wait, everything else completes; failed evidence on a waiting task keeps the live approval alive).
+- **Authority revisions** — a changed instruction bumps `revision`; consequential approvals are bound to `{taskId, revision}` at propose time inside the runtime gateway and re-checked at approve time (`Approval invalidated by task edit`). Approval-continuation messages (`approve/reject …`) never bump the revision they approve.
+- **Pause** — `PAUSING → PAUSED` at the safe boundary, aborts the in-flight model call (`AbortSignal` through `nvidia-router.js`); the next action is never initiated (zero gateway, zero model, zero approvals) while paused.
+- **Stop** — idempotent `CANCELLED`; cancels every task-bound approval (`cancelTaskApprovals`, evidenced in the response), cancels the pending edit approval, and terminates TOM-owned commands via `cancelOwnedExecution` (owned PID only, never a proposal — the operator's explicit Stop is the authorization). The stopped task stays visible and retryable; the cancelled approval can never be revived.
+- **Attachments** (`tools/attachment-store.js`) — DATA-only boundary: extension allowlist + explicit executable blocklist, 1 MB / 5-file caps, base64 transport, traversal-proof names, per-task ownership checks. Stored under `.tom-attachments/<taskId>` (mode 0600, `TOM_ATTACHMENT_DIR` overridable for isolation), embedded ONLY into model messages as framed reference data. The module contains no spawn/exec/eval of any kind.
+- **Voice** — Web Speech API in `public/tom-controls.js` with graceful degradation (`supported:false` + visible notice), permission-denied notice, editable transcript appended to the composer; sending is always a manual action. The shared module performs no network I/O.
+- **Copy/Share** — per-message buttons; share payloads pass `buildShareText()` redaction (API keys, bearer/password/token patterns, AWS keys) before `navigator.share`/clipboard fallback.
+- **UI** — buttons derive exclusively from `task.controls` via `TomControls.deriveButtons`; no local busy/pause booleans exist anywhere in `public/app.js`.
+
+Acceptance evidence: `tests/phase1-acceptance.e2e.test.js` boots the REAL server as a clean child process against a local model stub (`TOM_MODEL_BASE_URL`) and drives the S-UI / A-B / Q / R / S scenarios over HTTP only. Two consecutive `node --test tests/` clean-start runs: **218/218 PASS** each.
 
 ## Requirement Traceability
 
@@ -129,4 +280,12 @@ Key files: `tests/terminal-runner.test.js` (security/policy/approval/evidence, i
 | 1.26 Resource bounds | Limits for approvals, commands, output, and time | Full runtime test suite | PASS |
 | 1.27 Gateway/legacy integration | Action Gateway is authoritative; legacy runner fails closed | Regression and integration tests | PASS |
 | 1.28 Documentation and Git release | This traceability document plus reviewed release commit | `PHASE1.md`, Git status/diff, release commit | PASS |
-| 1.29 Phase completion | Requirements 1.1-1.28 complete and verified | 154/154 regression, 37/37 focused, release verification | PASS |
+| 1.29 Phase completion | Requirements 1.1-1.28 complete and verified | Phase 1 completion snapshot: 154/154 regression, 37/37 focused, release verification (current suite: 218/218 across two consecutive clean-start runs — was 168/168 pre-Control-Panel, see Post-Phase-1 security hardening) | PASS |
+| 1.30 Live service-phrasing routing | Whole-message service grammar (`classifyRuntimeActions`) routes the five DROP phrases to `runtime.*` with the configured `serviceId` | `chat-runtime-routing.integration.test.js`, `runtime-e2e.test.js` | PASS |
+| 1.31 Unresolved service default-deny | `findUnresolvedServiceRequest()` refuses unknown project/service/port/PID wording with zero approval, process and model calls | `chat-runtime-routing.integration.test.js` | PASS |
+| 1.32 Runtime ownership arguments | Port/PID/cwd/command are configuration only; `plainArgs()` and the service allowlist fail closed | `runtime-e2e.test.js` ownership test | PASS |
+| 1.33 Task lifecycle & control panel | `task-session.js` state machine, `/task` routes, `/chat` fail-closed gate, server-derived `controls` | `task-session.test.js`, `chat-task-control.integration.test.js`, `ui-control-panel.test.js` | PASS |
+| 1.34 Approval↔task authority binding | Approvals bound to `{taskId, revision}` at propose, re-checked at approve; Stop cancels task-bound approvals | `runtime-e2e.test.js` binding test, `chat-task-control.integration.test.js` (J/K) | PASS |
+| 1.35 Attachment data boundary | `attachment-store.js`: allowlist/blocklist, 1 MB/5-file caps, traversal-proof names, per-task ownership; no execution primitives | `attachment-store.test.js`, `chat-attachments.integration.test.js` | PASS |
+| 1.36 Voice, copy/share controls | Web Speech wrapper with graceful degradation + manual send; redacted share payloads | `tom-controls.test.js`, `ui-control-panel.test.js` | PASS |
+| 1.37 Black-box acceptance | Clean child server + model stub over real HTTP: S-UI, A/B stale-status, Q lifecycle, R attachments, S controls | `phase1-acceptance.e2e.test.js` — two consecutive clean-start runs, 218/218 each | PASS |

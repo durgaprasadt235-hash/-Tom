@@ -32,3 +32,5 @@ models/
 
 # Logs
 *.log
+# Chat attachment uploads (data-only, never committed)
+workspace/.tom-attachments/

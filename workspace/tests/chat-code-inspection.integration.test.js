@@ -107,7 +107,10 @@ test('exact inspection request keeps diagnostics and code evidence authoritative
   assert.equal(toolCalls['vscode.file.apply_edit'] || 0, 0);
   assert.equal(toolCalls['vscode.file.propose_edit'] || 0, 0);
   assert.equal(modelInput.file.lineCount, sourceContent.split(/\r?\n/).length);
-  assert.deepEqual(modelOptions, { temperature: 0, maxTokens: 2000 });
+  // Pause/Stop abort support: the router also receives a task abort signal.
+  assert.equal(modelOptions.temperature, 0);
+  assert.equal(modelOptions.maxTokens, 2000);
+  assert.ok(modelOptions.signal instanceof AbortSignal);
   assert.equal(
     modelInput.file.numberedSource,
     sourceContent.split(/\r?\n/).map((line, index) => `${index + 1} | ${line}`).join('\n')

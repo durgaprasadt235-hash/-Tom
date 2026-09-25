@@ -131,6 +131,11 @@
         <span>Project: DROP</span>
       </div>
 
+      <div class="global-status" id="globalStatus" role="status" aria-live="polite" title="Workspace health">
+        <span class="status-dot warning" id="globalStatusDot"></span>
+        <span id="globalStatusLabel">Not checked</span>
+      </div>
+
       <div class="search">
         <input
           type="text"
@@ -150,19 +155,6 @@
 
     <section id="home" class="page active">
       <div class="home-dashboard">
-        <header class="home-welcome">
-          <div class="home-welcome-copy">
-            <span class="home-eyebrow">Workspace overview</span>
-            <h1>Good morning, Durga <span aria-hidden="true">👋</span></h1>
-            <p>Tom, your workspace copilot, always ready.</p>
-          </div>
-          <div class="home-shift">
-            <time id="currentDate">Loading date…</time>
-            <strong id="currentTime">--:--</strong>
-            <span><i aria-hidden="true"></i> On Shift</span>
-          </div>
-        </header>
-
         <section class="home-tom-note">
           <span class="tom-orb large" aria-hidden="true"></span>
           <div>
@@ -309,11 +301,32 @@
 
           <form class="tom-composer" id="tomComposer">
             <div class="tom-context-chips" id="tomContextChips" hidden></div>
+            <div class="tom-attachment-list" id="tomAttachmentList" hidden aria-label="Attached files"></div>
             <div class="composer-box">
-              <textarea id="tomInput" rows="1" placeholder="Ask Tom about your project..." aria-label="Message Tom"></textarea>
-              <button id="tomSendButton" type="submit" disabled>Send</button>
+              <textarea id="tomInput" rows="2" placeholder="Ask Tom about your project..." aria-label="Message Tom"></textarea>
+              <div class="composer-bottom-row">
+                <div class="composer-primary-actions">
+                  <input type="file" id="tomAttachInput" multiple hidden
+                    accept=".txt,.md,.json,.csv,.tsv,.log,.yaml,.yml,.js,.jsx,.ts,.tsx,.py,.html,.css,.sql,.xml,.ini" />
+                  <button type="button" class="composer-icon-button" id="tomAttachButton" title="Attach data files (max 5 × 1 MB)" aria-label="Attach files"><span aria-hidden="true">＋</span></button>
+                  <span class="composer-inline-status" id="tomTaskStatus" role="status">Ready</span>
+                </div>
+                <div class="composer-send-actions">
+                  <a class="composer-icon-button composer-open-app" id="tomOpenApp" target="_blank" rel="noopener noreferrer" hidden aria-label="Open managed app" title="Open app"></a>
+                  <span class="composer-task-controls" id="tomTaskControls" hidden>
+                    <button type="button" class="composer-icon-button composer-pause" id="tomPauseButton" hidden aria-label="Pause Tom" title="Pause"><span aria-hidden="true">Ⅱ</span></button>
+                    <button type="button" class="composer-icon-button composer-resume" id="tomResumeButton" hidden aria-label="Resume Tom" title="Resume"><span aria-hidden="true">▶</span></button>
+                    <button type="button" class="composer-icon-button composer-stop" id="tomStopButton" hidden aria-label="Stop Tom" title="Stop"><span aria-hidden="true">■</span></button>
+                  </span>
+                  <button type="button" class="composer-icon-button composer-mic" id="tomVoiceButton" hidden title="Voice input" aria-pressed="false" aria-label="Start voice input"><span aria-hidden="true">◉</span></button>
+                  <button id="tomSendButton" class="composer-send-button" type="submit" disabled aria-label="Send message" title="Send"><span aria-hidden="true">↑</span></button>
+                </div>
+              </div>
+              <span class="composer-voice-notice" id="tomVoiceNotice" role="status" hidden></span>
             </div>
-            <span class="composer-hint">Enter to send · Shift+Enter for a new line</span>
+            <div class="composer-footer-row">
+              <span class="composer-hint">Enter to send · Shift+Enter for a new line</span>
+            </div>
           </form>
         </section>
       </div>
@@ -588,6 +601,7 @@
 
 
   <script src="/topology.js"></script>
+  <script src="/tom-controls.js"></script>
   <script src="/app.js"></script>
 
 </body>

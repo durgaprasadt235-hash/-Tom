@@ -55,8 +55,15 @@ function consumeApproval(approvalId, relativePath) {
   return approval;
 }
 
+function cancelApproval(approvalId) {
+  if (typeof approvalId !== "string") return null;
+  const approval = approvals.get(approvalId) || null;
+  approvals.delete(approvalId);
+  return approval;
+}
+
 function resetForTests() {
   approvals.clear();
 }
 
-module.exports = { createApproval, getApproval, consumeApproval, resetForTests, APPROVAL_TTL_MS };
+module.exports = { createApproval, getApproval, consumeApproval, cancelApproval, resetForTests, APPROVAL_TTL_MS };

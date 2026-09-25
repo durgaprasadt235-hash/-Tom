@@ -12,6 +12,8 @@ const { sanitizeAndBoundHistory, findPendingApprovalId, executePlan } = require(
 const { numberSourceLines, buildInspectionEvidence, parseInspectionAnalysis, renderInspectionResponse } = require("./tools/code-inspection-runtime");
 const { createUnusedImportEdits } = require("./tools/unused-code-cleanup");
 const taskEvidenceStore = require("./tools/task-evidence-store");
+const { createTaskStore, TERMINAL: TERMINAL_TASK_STATES } = require("./tools/task-session");
+const attachmentStore = require("./tools/attachment-store");
 const { filterDiagnostics, renderPostEditVerification } = require("./tools/post-edit-verification");
 const { stripChainOfThought } = require("./tools/response-sanitizer");
 const editApprovalStore = require("./tools/edit-approval-store");
@@ -29,7 +31,7 @@ const runtimeIntent = require("./tools/runtime-intent");
 
 const app = express();
 
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({ limit: "4mb" }));
 
 // Minimal CORS so the TOM workspace UI (hosted page) can call this API
 // from the user's browser. These endpoints use no cookies or credentials.
@@ -46,7 +48,84 @@ app.use((req, res, next) => {
 // TOM CONFIGURATION
 // ---------------------------------------
 
-const PORT = 3001;
+// PORT is environment-configurable so black-box acceptance runs can start a
+// clean server on an isolated port. Default remains 3001.
+const PORT = Number.isInteger(Number(process.env.PORT)) && Number(process.env.PORT) > 0 && Number(process.env.PORT) <= 65535
+  ? Number(process.env.PORT)
+  : 3001;
+
+// Server-authoritative task lifecycle (Chat Control Panel). The UI renders
+// only what task.controls says after each response — never local booleans.
+const taskStore = createTaskStore();
+// In-flight model call per task, so Pause/Stop can abort it at the boundary.
+const modelAbortByTask = new Map();
+// Approval-continuation messages are control traffic, not instruction edits:
+// they must never bump the authority revision they are approving.
+const TASK_CONTINUATION = /^\s*(?:approve|reject)\s+(?:execution|edit)\b/i;
+/*
+  APPROVAL CONTINUATION — kind-aware, fail-closed (defect: approval wording
+  escaping to the model).
+
+  While a task waits on a RUNTIME approval, any realistic approval wording
+  must resolve to that pending approval deterministically — never to the
+  model. "approve execution <id>" is exact-match classified, but "I approve
+  execution <id>", "Approved. Execute it.", "go ahead", and bare "approve"
+  previously fell through: the model fabricated a bare
+  {"approvalId","decision":"approve"} reply and NOTHING was ever dispatched
+  (the word "decision" exists nowhere in TOM's own payloads — it is always
+  model fabrication). Bare "approve" additionally landed in the EDIT handler
+  ("Edit not applied…") because approval kind was never recorded.
+*/
+const APPROVAL_UUID_PATTERN = /\b([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/i;
+// Negation first: "Do not approve anything until I review it." is NOT an approval.
+const APPROVAL_NEGATION = /\b(?:do not|don't|dont|never|not|cannot|can't)\b[^.!?]*\b(?:approve|reject|apply)\b/i;
+// approve/approved/(re)ject forms only — deliberately NOT the noun "approval",
+// so "what is the approval status?" can never dispatch anything.
+const APPROVAL_VERB = /\b(approve|approved|approves|approving|reject|rejected|rejects)\b/i;
+const APPROVAL_AFFIRMATIVE = /^(?:i\s+)?(?:sure(?:,\s*yes)?|yes(?:\s+please)?|yep|ok(?:ay)?|go\s+ahead|proceed|confirm(?:ed)?|do\s+it|looks\s+good|ship\s+it)\b[.!,\s]*$/i;
+const APPROVAL_NEGATIVE = /^(?:i\s+)?(?:no(?:\s+thanks)?|stop(?:\s+it)?)\b[.!,\s]*$/i;
+
+function resolveExecutionApproval(message, session) {
+  const text = String(message || "").trim();
+  if (!text || APPROVAL_NEGATION.test(text)) return null;
+  const pending = session && session.pendingApproval;
+  const pendingRuntime = Boolean(session && session.state === "WAITING_FOR_APPROVAL" &&
+    pending && pending.kind === "runtime");
+  const uuid = (text.match(APPROVAL_UUID_PATTERN) || [])[1];
+  const mentionsEdit = /\bedits?\b/i.test(text);
+  const mentionsExecution = /\bexecut/i.test(text);
+  const verbMatch = mentionsEdit ? null : text.match(APPROVAL_VERB);
+  const verb = verbMatch
+    ? (verbMatch[1].toLowerCase().startsWith("rej") ? "reject" : "approve")
+    : null;
+
+  // "approve execution <id>" / "Approved. Execute it." — explicit execution
+  // approval. The id comes from the message, else from the pending runtime
+  // approval; with NEITHER, the gateway fails closed ("Unknown or consumed
+  // approval") instead of the model narrating an approval that never ran.
+  if (verb && mentionsExecution) {
+    const approvalId = uuid || (pendingRuntime ? pending.approvalId : undefined);
+    return { tool: "execution." + verb, args: approvalId ? { approvalId } : {} };
+  }
+  // "<verb> <uuid>" without context words: an id the EDIT store owns stays
+  // on the edit path; any other uuid routes to the runtime store, which
+  // fails closed if it is not one of its own approvals.
+  if (verb && uuid) {
+    if (editApprovalStore.getApproval(uuid)) return null;
+    return { tool: "execution." + verb, args: { approvalId: uuid } };
+  }
+  // Bare "approve"/"reject": the PENDING APPROVAL'S KIND picks the store —
+  // runtime approvals dispatch here, edit approvals fall to the edit path.
+  if (verb && pendingRuntime) {
+    return { tool: "execution." + verb, args: { approvalId: pending.approvalId } };
+  }
+  // Verb-less yes/no control traffic while a runtime approval is pending.
+  if (!verb && pendingRuntime) {
+    if (APPROVAL_AFFIRMATIVE.test(text)) return { tool: "execution.approve", args: { approvalId: pending.approvalId } };
+    if (APPROVAL_NEGATIVE.test(text)) return { tool: "execution.reject", args: { approvalId: pending.approvalId } };
+  }
+  return null;
+}
 
 const TOM_SYSTEM_PROMPT = `
 You are Tom, the AI intelligence layer for this project workspace.
@@ -148,7 +227,242 @@ function verificationReply(result) {
 // GENERAL TOM CHAT
 // ---------------------------------------
 
+/*
+  SECURITY: recognizes execution wording that did NOT classify to a validated
+  runtime tool. Each "run/execute/rerun ..." clause is inspected on its own, so
+  a message cannot hide one authorized-looking phrase behind another.
+  Clauses targeting a read-only TOM surface ("VS Code diagnostics",
+  "diagnostics", "checks") are ordinary inspection phrasing and are left to the
+  deterministic inspection path; every other target is an unauthorized probe.
+  Returns the offending target string, or null when the message is not an
+  execution attempt at all.
+*/
+const RECOGNIZED_RUN_TARGET =
+  /^(?:(?:vs\s*code|vscode)\s+)?(?:diagnostics|checks)(?:\s+(?:for|on|of)\s+[\w./-]+)?[,]?$/i;
+
+function findUnauthorizedExecutionAttempt(message) {
+  const text = String(message || "");
+  // Approval/rejection wording for an already-created execution approval is
+  // routed by runtimeIntent.classify and must not be swallowed here.
+  if (/^\s*(?:approve|reject)\s+execution\b/i.test(text)) return null;
+  const clause =
+    /(?:^|[.!?]\s*|\b(?:and|then|also)\s+)(?:(?:please|also)\s+)*(?:run|execute|rerun|re-run)\s+([^.;!?]*)/gi;
+  let match;
+  while ((match = clause.exec(text)) !== null) {
+    const target = match[1].trim().replace(/^the\s+/i, "");
+    if (!RECOGNIZED_RUN_TARGET.test(target)) return target || "(unspecified target)";
+  }
+  return null;
+}
+
+/*
+  SECURITY: unresolved managed-service wording.
+
+  A service lifecycle request ("start the DROP development server", "stop the
+  ACME server", "check service foo") that did NOT resolve to the single
+  configured managed service is refused deterministically here — zero
+  approval, zero process, zero model call. Service identity can ONLY come from
+  trusted configuration (projectId + serviceId); project names, ports, PIDs
+  and paths in message text can never address or own a process.
+
+  The clause must be imperative (message start, or after "and/then/also"), so
+  ordinary questions ("how do I start a server?") stay conversational. Every
+  clause is inspected independently, so an authorized-looking clause cannot
+  mask a service clause.
+*/
+const SERVICE_LIFECYCLE_VERB =
+  /^(?:start|stop|restart|kill|check|show|get|display|view|report|status|logs|health)$/i;
+const SERVICE_NOUN = /\b(?:servers?|runtimes?|services?|daemons?|process(?:es)?|pids?)\b/i;
+// A subject that is exactly a service identity (with an optional address
+// suffix such as "on port 9999" / "pid 42") — i.e. what a user would type to
+// name one managed service.
+const SERVICE_IDENTITY_SUBJECT =
+  /^(?:\w+\s+)*(?:servers?|runtimes?|services?|daemons?|process(?:es)?|pids?)(?:\s+(?:on|at|using)\s+(?:port\s+)?\d+|\s+with\s+(?:pid|process\s+id|id|port)\s+\d+|\s+(?:pid|id)\s+\d+|\s*#\s*\d+|\s+\d+)?$/i;
+const SERVICE_VERB_TOOL = { start: "runtime.start", stop: "runtime.stop", restart: "runtime.restart",
+  kill: "runtime.stop", status: "runtime.status", logs: "runtime.logs", health: "runtime.health",
+  check: "runtime.status", show: "runtime.status", get: "runtime.status", display: "runtime.status",
+  view: "runtime.status", report: "runtime.status" };
+
+// Clause boundaries: sentence punctuation and the connectors TOM treats as
+// clause starts ("and/then/also"), so a leading non-lifecycle clause
+// ("Do not run npm test, then start the dev server.") cannot hide a later
+// service clause.
+const SERVICE_CLAUSE_SPLIT = /\s*[.;!?]+\s*|\s+(?:and|then|also)\s+/i;
+
+function findUnresolvedServiceRequest(message) {
+  const clauses = String(message || "").split(SERVICE_CLAUSE_SPLIT);
+  for (const raw of clauses) {
+    const clause = raw.trim().replace(/^(?:please|also)\s+/i, "");
+    const words = clause.split(/\s+/).filter(Boolean);
+    const verb = (words[0] || "").toLowerCase();
+    if (!SERVICE_LIFECYCLE_VERB.test(verb)) continue;
+    const subject = words.slice(1).join(" ").trim();
+    if (!SERVICE_NOUN.test(subject)) continue;
+    return { verb, subject, identity: SERVICE_IDENTITY_SUBJECT.test(subject),
+      tool: SERVICE_VERB_TOOL[verb] || "runtime.status" };
+  }
+  return null;
+}
+
+// ---------------------------------------
+// TASK CONTROL (server-authoritative lifecycle)
+// ---------------------------------------
+// Pause / Resume / Stop / Edit are gated by the task store, never by the
+// client. Unknown sessions fail closed (404/409), and every response carries
+// the authoritative `task` view (state + controls) the UI must render.
+
+function unknownTask(res) {
+  return res.status(404).json({ error: "Unknown task session" });
+}
+
+function taskTransitionError(res, error) {
+  return res.status(409).json({ error: error.message || "Invalid task transition" });
+}
+
+app.post("/task", (req, res) => {
+  const label = req.body && typeof req.body.label === "string" ? req.body.label : null;
+  const session = taskStore.create({ label });
+  return res.json({ task: taskStore.view(session.taskId) });
+});
+
+app.get("/task/:taskId", (req, res) => {
+  const task = taskStore.view(req.params.taskId);
+  return task ? res.json({ task }) : unknownTask(res);
+});
+
+app.get("/runtime/open-app", async (_req, res) => {
+  try { return res.json(await actionGateway.getBrowserTarget()); }
+  catch (error) { return res.json({ available: false, reason: error.message || "Unavailable" }); }
+});
+
+app.post("/task/:taskId/pause", (req, res) => {
+  const { taskId } = req.params;
+  if (!taskStore.get(taskId)) return unknownTask(res);
+  try {
+    taskStore.pause(taskId, "user");
+    // Abort the in-flight model call at the safe boundary. No process is
+    // ever killed by Pause: owned commands finish to their safe boundary.
+    const inFlight = modelAbortByTask.get(taskId);
+    if (inFlight) inFlight.abort();
+    return res.json({ task: taskStore.view(taskId) });
+  } catch (error) {
+    return taskTransitionError(res, error);
+  }
+});
+
+app.post("/task/:taskId/resume", (req, res) => {
+  const { taskId } = req.params;
+  if (!taskStore.get(taskId)) return unknownTask(res);
+  try {
+    const session = taskStore.get(taskId);
+    const instruction = req.body && typeof req.body.instruction === "string" ? req.body.instruction.trim() : "";
+    if (instruction && instruction !== session.instruction) {
+      // Edit-after-pause: NEW user authority. The revision bump makes every
+      // approval bound to the previous revision permanently stale.
+      taskStore.editInstruction(taskId, instruction);
+    }
+    taskStore.resume(taskId);
+    return res.json({ task: taskStore.view(taskId) });
+  } catch (error) {
+    return taskTransitionError(res, error);
+  }
+});
+
+app.post("/task/:taskId/edit", (req, res) => {
+  const { taskId } = req.params;
+  if (!taskStore.get(taskId)) return unknownTask(res);
+  try {
+    const instruction = req.body && typeof req.body.instruction === "string" ? req.body.instruction.trim() : "";
+    taskStore.editInstruction(taskId, instruction);
+    return res.json({ task: taskStore.view(taskId) });
+  } catch (error) {
+    return taskTransitionError(res, error);
+  }
+});
+
+app.post("/task/:taskId/stop", async (req, res) => {
+  const { taskId } = req.params;
+  const session = taskStore.get(taskId);
+  if (!session) return unknownTask(res);
+  try {
+    taskStore.stop(taskId, "user");
+    const inFlight = modelAbortByTask.get(taskId);
+    if (inFlight) inFlight.abort();
+
+    // Evidence-driven cleanup: cancel every pending approval bound to this
+    // task (runtime + edit stores), then terminate any TOM-owned command.
+    const cancelledRuntime = actionGateway.cancelTaskApprovals(taskId);
+    const pendingEdit = session.pendingApproval
+      ? editApprovalStore.cancelApproval(session.pendingApproval.approvalId)
+      : null;
+    const cancelledApprovals = [
+      ...cancelledRuntime,
+      ...(pendingEdit && !cancelledRuntime.includes(pendingEdit.approvalId) ? [pendingEdit.approvalId] : [])
+    ];
+    for (const approvalId of cancelledApprovals) taskStore.noteCancelledApproval(taskId, approvalId);
+    // Stop CANCELS every pending approval — nothing stays pending on a
+    // cancelled task (stale bookkeeping used to leave orphaned entries).
+    session.pendingApproval = null;
+
+    const executionCleanup = [];
+    for (const executionId of [...session.ownedExecutions]) {
+      const result = await actionGateway.cancelOwnedExecution(executionId);
+      executionCleanup.push({
+        tool: "terminal.cancel",
+        executionId,
+        success: Boolean(result && result.success),
+        error: result && result.success ? null : ((result && result.error) || "cancel failed")
+      });
+      if (result && result.success) {
+        const remaining = session.ownedExecutions.filter((id) => id !== executionId);
+        session.ownedExecutions = remaining;
+      }
+    }
+
+    return res.json({
+      task: taskStore.view(taskId),
+      evidence: { cancelledApprovals, executionCleanup }
+    });
+  } catch (error) {
+    return taskTransitionError(res, error);
+  }
+});
+
+// ---------------------------------------
+// CHAT ATTACHMENTS (data-only boundary)
+// ---------------------------------------
+// Attachments are inert data: validated type/size, stored outside the
+// project tree, and embedded ONLY into model messages — never into a
+// command, path, or argument (see tools/attachment-store.js).
+
+app.post("/attachment", (req, res) => {
+  try {
+    const body = req.body || {};
+    const taskId = typeof body.taskId === "string" ? body.taskId : "";
+    if (!taskId || !taskStore.get(taskId)) {
+      return res.status(400).json({ error: "A valid taskId is required" });
+    }
+    const attachment = attachmentStore.create({
+      taskId,
+      name: body.name,
+      type: body.type,
+      data: body.data,
+      encoding: body.encoding
+    });
+    return res.json({ attachment });
+  } catch (error) {
+    return res.status(400).json({ error: error.message || "Attachment rejected" });
+  }
+});
+
+app.get("/attachment/:taskId", (req, res) => {
+  if (!taskStore.get(req.params.taskId)) return unknownTask(res);
+  return res.json({ attachments: attachmentStore.list(req.params.taskId) });
+});
+
+
 app.post("/chat", async (req, res) => {
+  let taskId = null;
   try {
     const message = req.body.message;
 
@@ -176,16 +490,218 @@ app.post("/chat", async (req, res) => {
       Validate them before sending them to the model.
     */
 
-    const runtimeRequest = runtimeIntent.classify(message);
+    /* ---------------------------------------------------------------
+      TASK AUTHORITY (server-side, before ANY gateway or model call)
+      --------------------------------------------------------------- */
+    taskId = typeof req.body.taskId === "string" ? req.body.taskId.trim() : "";
+    if (taskId && !taskStore.get(taskId)) {
+      return res.status(400).json({ error: "Unknown task session" });
+    }
+    if (!taskId) {
+      taskId = taskStore.create({ label: message.trim().slice(0, 120) }).taskId;
+    }
+
+    // ONE exit path: every payload (success, denial, approval, error) leaves
+    // with a fresh authoritative task view, and the task state advances here:
+    // an approval-bearing response waits for approval, anything else completes.
+    const baseJson = res.json.bind(res);
+    res.json = (payload) => {
+      if (payload && typeof payload === "object") {
+        try {
+          let approvalId = null;
+          if (typeof payload.approvalId === "string") {
+            approvalId = payload.approvalId;
+          } else if (typeof payload.reply === "string") {
+            const match = payload.reply.match(/Approval ID:\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+            if (match) approvalId = match[1];
+          }
+          const session = taskStore.get(taskId);
+          const state = session ? session.state : null;
+          const inFlightState = ["IDLE", "PLANNING", "RUNNING", "WAITING_FOR_APPROVAL"].includes(state);
+          // Failed evidence (denied/invalidated attempt) must NOT complete a
+          // task that is still waiting on a live approval — the pending
+          // approval survives a bad approve attempt and stays actionable.
+          const failedEvidence = Array.isArray(payload.toolEvidence) &&
+            payload.toolEvidence.some((item) => item && item.success === false);
+          const holdsApproval = state === "WAITING_FOR_APPROVAL" && failedEvidence &&
+            Boolean(session && session.pendingApproval);
+          if (approvalId && inFlightState) {
+            // KIND decides which store later approval wording may talk to:
+            // edit proposals carry vscode.file.propose_edit, everything else
+            // (runtime.start/stop/restart, terminal.run) is a runtime approval.
+            const isEditProposal = Array.isArray(payload.toolsUsed) &&
+              payload.toolsUsed.includes("vscode.file.propose_edit");
+            taskStore.waitForApproval(taskId, approvalId, isEditProposal ? "edit" : "runtime");
+          } else if (!approvalId && !holdsApproval &&
+            ["PLANNING", "RUNNING", "WAITING_FOR_APPROVAL"].includes(state)) {
+            taskStore.complete(taskId, "response sent");
+          }
+          payload.task = taskStore.view(taskId);
+        } catch (_) {
+          payload.task = taskStore.view(taskId);
+        }
+      }
+        // SECURITY: only TOM's deterministic stores decide approvals. TOM's
+        // own payloads NEVER contain a "decision" key — a model reply that
+        // carries one is fabricated approval theater and is refused here, at
+        // the single exit path, instead of being rendered as a real decision.
+        if (typeof payload.reply === "string" &&
+            !String(payload.provider || "").startsWith("tom-") &&
+            /["']?decision["']?\s*:\s*["']?(?:approve|reject)/i.test(payload.reply)) {
+          payload.reply = "Approval decisions come only from TOM's action gateway, so that reply was not applied. No action was dispatched. Request the action again and answer its approval prompt.";
+          payload.modelDecisionRefused = true;
+        }
+      return baseJson(payload);
+    };
+
+    // Approval-wording variants resolve BEFORE authority bookkeeping so they
+    // behave exactly like the exact wording: control traffic that never edits
+    // the instruction, never bumps the authority revision, and never the model.
+    const approvalContinuation = resolveExecutionApproval(message, taskStore.get(taskId));
+    const isContinuation = approvalContinuation !== null || TASK_CONTINUATION.test(message);
+    let gate = taskStore.canInitiateAction(taskId);
+    if (!gate.allowed && TERMINAL_TASK_STATES.has(gate.state) && !isContinuation) {
+      // A stopped/finished task stays visible; a NEW message on it is an
+      // explicit retry — a fresh PLANNING cycle with recalculated authority.
+      const retryText = message.trim();
+      const session = taskStore.get(taskId);
+      if (session.instruction && session.instruction !== retryText) {
+        taskStore.editInstruction(taskId, retryText);
+      } else {
+        taskStore.setInstruction(taskId, retryText);
+      }
+      taskStore.beginPlanning(taskId);
+      gate = taskStore.canInitiateAction(taskId);
+    }
+    if (!gate.allowed) {
+      // FAIL CLOSED: paused/stopped/transitional tasks initiate NOTHING —
+      // zero gateway calls, zero model calls, zero approvals.
+      return res.json({
+        reply: gate.reason + ". No action was started. Use Resume to continue this task, or start a new task.",
+        provider: "tom-task-control",
+        taskControl: gate,
+        toolEvidence: [],
+        toolActivity: [],
+        toolsUsed: []
+      });
+    }
+    if (!isContinuation) {
+      const session = taskStore.get(taskId);
+      const instruction = message.trim();
+      if (session.instruction && session.instruction !== instruction) {
+        // New message text = NEW user authority: bump the revision so any
+        // approval proposed under the previous instruction goes stale.
+        taskStore.editInstruction(taskId, instruction);
+      } else {
+        taskStore.setInstruction(taskId, instruction);
+      }
+      taskStore.beginPlanning(taskId);
+    } else if (taskStore.get(taskId).state === "IDLE") {
+      taskStore.beginPlanning(taskId);
+    }
+
+    // Attachment context is DATA embedded into the model message only.
+    // Invalid or cross-task attachment ids fail closed as a 400.
+    let attachmentBlock = "";
+    if (Array.isArray(req.body.attachmentIds) && req.body.attachmentIds.length) {
+      try {
+        attachmentBlock = attachmentStore.contextFor(taskId, req.body.attachmentIds);
+      } catch (error) {
+        return res.status(400).json({ error: error.message });
+      }
+    }
+
+    // Task-gated model caller: re-checked immediately before every model call
+    // so a Pause that landed mid-request prevents the NEXT action, and the
+    // in-flight call is abortable at the safe boundary.
+    const callModel = async (modelMessages, options = {}) => {
+      const modelGate = taskStore.canInitiateAction(taskId);
+      if (!modelGate.allowed) {
+        const failure = new Error("Task not actionable: " + modelGate.reason);
+        failure.taskControl = modelGate;
+        throw failure;
+      }
+      const controller = new AbortController();
+      modelAbortByTask.set(taskId, controller);
+      try {
+        return await askNvidia(modelMessages, { ...options, signal: controller.signal });
+      } finally {
+        if (modelAbortByTask.get(taskId) === controller) modelAbortByTask.delete(taskId);
+      }
+    };
+
+    const runtimeRequest = approvalContinuation || runtimeIntent.classify(message);
     // Preserve combined edit/proposal behavior; execution remains separately approved.
     const combinedEdit = planEditProposal(message) || planExplicitReplacement(message) || planPostEditVerification(message);
     if (runtimeRequest && !combinedEdit) {
-      const evidence = await actionGateway.executeTool(runtimeRequest.tool, runtimeRequest.args);
+      // Task context binds consequential approvals to THIS task and THIS
+      // authority revision (enforced by the runtime gateway at approve time).
+      const taskContext = { taskId, revision: taskStore.authorityRevision(taskId) };
+      const evidence = await actionGateway.executeTool(runtimeRequest.tool, runtimeRequest.args, taskContext);
+      // Track commands this task owns so Stop can terminate them with evidence.
+      if (evidence && evidence.success && evidence.data && typeof evidence.data.executionId === "string") {
+        taskStore.noteOwnedExecution(taskId, evidence.data.executionId);
+      }
+      // SECURITY: a deterministic runtime result — success, denial, or
+      // pending approval — is FINAL. It must terminate the request here
+      // so it can never fall through to the NVIDIA model fallback below
+      // (which would let the model narrate, invent, or corrupt the result).
       return res.json({ reply: runtimeIntent.render(evidence), provider: "tom-action-gateway",
+        // A consequential runtime action (runtime.start/stop/restart) only ever
+        // returns pending here: the managed process is created later, by the
+        // explicit "approve execution <id>" continuation.
+        ...(evidence.data && evidence.data.status === "pending_approval" && evidence.data.approvalId
+          ? { approvalId: evidence.data.approvalId, approvalExpiresAt: evidence.data.expiresAt } : {}),
         toolsUsed: [runtimeRequest.tool], toolActivity: ["Processing " + runtimeRequest.tool],
         toolEvidence: [{ tool: runtimeRequest.tool, args: runtimeRequest.args, ...evidence }],
         executionPlan: { intent: runtimeRequest.tool, steps: [{ ...runtimeRequest,
           riskLevel: runtimeRequest.tool === "terminal.discover" || /\.(status|logs|health|port)$/.test(runtimeRequest.tool) ? "read" : "consequential" }] }
+      });
+    }
+
+    /*
+      SECURITY: default-deny short-circuit for unauthorized command probes.
+
+      A message that asks for execution ("run X", "execute X", ...) but did
+      NOT classify to a validated runtime tool (the branch above) is an
+      unauthorized command. It is rejected deterministically here — zero
+      approval, zero process, zero model call — so no unrecognized command can
+      ever fall through to the NVIDIA/model path and be narrated as if it ran.
+
+      Read-only TOM surfaces are NOT command probes: "and run VS Code
+      diagnostics for it" is inspection phrasing handled by the deterministic
+      inspection path below. Every execution clause in the message is checked
+      independently, so "run diagnostics and also run curl X" still denies.
+    */
+    const executionAttempt = findUnauthorizedExecutionAttempt(message);
+    if (executionAttempt && !combinedEdit) {
+      const denied = { success: false, tool: "terminal.run", error: "Command is not allowlisted" };
+      return res.json({ reply: runtimeIntent.render(denied), provider: "tom-action-gateway",
+        toolsUsed: ["terminal.run"], toolActivity: ["Processing terminal.run"],
+        toolEvidence: [{ tool: "terminal.run", args: { requested: executionAttempt }, ...denied }],
+        executionPlan: { intent: "terminal.run", steps: [{ tool: "terminal.run", args: { requested: executionAttempt }, riskLevel: "consequential" }] }
+      });
+    }
+
+    /*
+      SECURITY: default-deny for unresolved managed-service wording.
+
+      "Start the DROP development server." and its stop/restart/status/logs
+      siblings resolve to the configured managed service in the branch above.
+      Anything else shaped like a service lifecycle request ("start the ACME
+      server", "stop process 4212", "restart the dev server on port 9999") is
+      refused here deterministically: no approval, no process, no model call.
+    */
+    const unresolvedService = findUnresolvedServiceRequest(message);
+    if (unresolvedService && !combinedEdit) {
+      const denied = { success: false, tool: unresolvedService.tool,
+        error: unresolvedService.identity ? "Unknown configured service" : "Unrecognized service request" };
+      return res.json({ reply: runtimeIntent.render(denied), provider: "tom-action-gateway",
+        toolsUsed: [unresolvedService.tool], toolActivity: ["Processing " + unresolvedService.tool],
+        toolEvidence: [{ tool: unresolvedService.tool, args: { requested: unresolvedService.subject }, ...denied }],
+        executionPlan: { intent: unresolvedService.tool, steps: [{ tool: unresolvedService.tool,
+          args: { requested: unresolvedService.subject },
+          riskLevel: /\.(?:status|logs|health|port)$/.test(unresolvedService.tool) ? "read" : "consequential" }] }
       });
     }
 
@@ -204,9 +720,13 @@ app.post("/chat", async (req, res) => {
       writes without a valid, unused, unexpired, path-matching approval
       (enforced by tools/edit-approval-store.js + agent.js writeProjectFile).
       This short-circuits the normal chat/NVIDIA pipeline entirely.
+
+      Execution approvals ("approve/reject execution <approvalId>") are
+      handled by the runtimeRequest branch above (runtime-intent.classify)
+      and must NEVER reach this edit path.
     */
 
-    if (editApproval) {
+    if (editApproval && !/\b(approve|reject)\s+execution\b/i.test(message)) {
       const pending = editApprovalStore.getApproval(editApproval.approvalId);
       const targetPath = pending ? pending.path : null;
       const applyResult = targetPath
@@ -488,7 +1008,7 @@ app.post("/chat", async (req, res) => {
         }
       ];
 
-      const editModelResult = await askNvidia(editMessages, { temperature: 0 });
+      const editModelResult = await callModel(editMessages, { temperature: 0 });
       if (!editModelResult || !editModelResult.content) {
         throw new Error("NVIDIA returned an empty response");
       }
@@ -625,7 +1145,7 @@ app.post("/chat", async (req, res) => {
       let analysis = { codeFacts: [], architecturalSuggestions: [] };
       let inspectionModel = null;
       try {
-        const modelResult = await askNvidia(inspectionMessages, { temperature: 0, maxTokens: 2000 });
+        const modelResult = await callModel(inspectionMessages, { temperature: 0, maxTokens: 2000 });
         inspectionModel = modelResult.model;
         analysis = parseInspectionAnalysis(modelResult.content, inspectionEvidence.file.content);
       } catch {
@@ -690,6 +1210,12 @@ app.post("/chat", async (req, res) => {
     const executionPlan = createExecutionPlan(message);
     const toolActivity = [];
     const toolEvidence = await executePlan(executionPlan, async (tool, args) => {
+      // Re-gate per step: a Pause/Stop that landed mid-request stops the
+      // NEXT action instead of silently continuing the plan.
+      const stepGate = taskStore.canInitiateAction(taskId);
+      if (!stepGate.allowed) {
+        return { success: false, tool, error: "Task not actionable: " + stepGate.reason };
+      }
       toolActivity.push(TOOL_ACTIVITY_LABELS[tool] || "Running " + tool + "...");
       return actionGateway.executeTool(tool, args);
     });
@@ -702,7 +1228,8 @@ app.post("/chat", async (req, res) => {
       ? JSON.stringify({ executionPlan, evidence: boundedEvidence }, null, 2)
       : "";
 
-    const finalUserContent = toolContext
+    const attachmentIntro = attachmentBlock ? attachmentBlock + "\n\n" : "";
+    const finalUserContent = attachmentIntro + (toolContext
       ? message.trim() +
         "\n\n" +
         "----- CURRENT-TURN ACTION GATEWAY EVIDENCE -----\n" +
@@ -722,7 +1249,7 @@ app.post("/chat", async (req, res) => {
         "conversation, the instructions, or the tool results. Do NOT start with " +
         "sections like 'Analyze User Input' or any step-by-step reasoning. " +
         "Begin directly with the repository facts."
-      : message.trim();
+      : message.trim());
 
     const messages = [
       {
@@ -740,8 +1267,8 @@ app.post("/chat", async (req, res) => {
 
 
     // NVIDIA router automatically tries its configured
-    // models until one succeeds.
-    const result = await askNvidia(messages);
+    // models until one succeeds. Gated + abortable via callModel.
+    const result = await callModel(messages);
 
 
     if (!result || !result.content) {
@@ -771,10 +1298,30 @@ app.post("/chat", async (req, res) => {
     });
 
   } catch (error) {
+    const failureSession = taskId ? taskStore.get(taskId) : null;
+    const failureState = failureSession ? failureSession.state : null;
+
+    // Pause/Stop cancelled the in-flight model call at the safe boundary:
+    // this is a successful control action, not a provider failure.
+    if (["PAUSING", "PAUSED", "CANCELLING", "CANCELLED"].includes(failureState)) {
+      return res.json({
+        reply: "Task paused at a safe boundary; the in-flight model call was cancelled and no further action was started.",
+        provider: "tom-task-control",
+        toolEvidence: [],
+        toolActivity: [],
+        toolsUsed: []
+      });
+    }
+
     console.error(
       "[Tom Chat Error]",
       error
     );
+
+    if (taskId && failureSession) {
+      try { taskStore.fail(taskId, error.message || "provider unavailable"); }
+      catch (_) { /* state already terminal — keep the original error */ }
+    }
 
     return res.status(503).json({
       error:
@@ -1546,7 +2093,23 @@ function startServer(port = PORT, host = "0.0.0.0") {
 }
 
 if (require.main === module) {
+  // Clean shutdown: SIGTERM/SIGINT terminate every TOM-supervised process
+  // group (managed services + owned commands) BEFORE the server exits, so no
+  // orphan dev server outlives TOM. In-process test hosts never run this path.
+  let shuttingDown = false;
+  const shutdownOnce = () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    const forced = setTimeout(() => process.exit(1), 5000);
+    const done = () => { clearTimeout(forced); process.exit(0); };
+    Promise.resolve()
+      .then(() => actionGateway.shutdown())
+      .catch(() => {})
+      .then(done, done);
+  };
+  process.on("SIGTERM", shutdownOnce);
+  process.on("SIGINT", shutdownOnce);
   startServer();
 }
 
-module.exports = { app, startServer };
+module.exports = { app, startServer, findUnauthorizedExecutionAttempt, findUnresolvedServiceRequest, taskStore };

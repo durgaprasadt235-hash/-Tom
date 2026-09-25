@@ -3112,3 +3112,520 @@ body.tom-collapsed .tom-divider {
   font-size: 12px;
   cursor: pointer;
 }
+
+// ---------------------------------------
+// CHAT CONTROL PANEL STYLES
+// ---------------------------------------
+
+.tom-attachment-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 4px 0;
+}
+
+.attachment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--border, #2a3140);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 12px;
+  color: var(--muted, #9aa4b2);
+}
+
+.attachment-remove {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.attachment-remove:hover {
+  color: #ff6b6b;
+}
+
+.tom-composer-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 2px 0;
+}
+
+.composer-control {
+  border: 1px solid var(--border, #2a3140);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted, #9aa4b2);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.composer-control:hover:enabled {
+  border-color: var(--accent, #6ea8fe);
+  color: var(--text, #e6e9ef);
+}
+
+.composer-control:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.composer-control.listening {
+  border-color: #ff6b6b;
+  color: #ff6b6b;
+}
+
+.composer-voice-notice {
+  flex-basis: 100%;
+  padding: 2px 4px 0;
+  color: var(--muted, #9aa4b2);
+  font-size: 11px;
+}
+
+.composer-danger:hover:enabled {
+  border-color: #ff6b6b;
+  color: #ff6b6b;
+}
+
+.composer-task-status {
+  font-size: 12px;
+  color: var(--muted, #9aa4b2);
+  margin-left: auto;
+}
+
+.composer-task-controls {
+  display: inline-flex;
+  gap: 6px;
+}
+
+/* Final compact TOM composer and message actions. */
+.tom-composer { max-width: 860px; margin: 0 auto; }
+.composer-box { border: 1px solid var(--border, #2a3140); border-radius: 22px; background: rgba(255,255,255,.045); padding: 10px 12px 8px; box-shadow: 0 8px 24px rgba(0,0,0,.12); }
+.composer-box textarea { width: 100%; min-height: 52px; max-height: 180px; resize: vertical; border: 0; outline: 0; background: transparent; color: var(--text, #e6e9ef); font: inherit; line-height: 1.45; padding: 4px 6px; }
+.composer-bottom-row { display: flex; align-items: center; gap: 8px; min-height: 32px; }
+.composer-primary-actions, .composer-send-actions { display: inline-flex; align-items: center; gap: 6px; }
+.composer-send-actions { margin-left: auto; }
+.composer-icon-button { width: 30px; height: 30px; display: inline-grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--muted, #9aa4b2); cursor: pointer; text-decoration: none; }
+.composer-icon-button:hover:enabled, .composer-icon-button:focus-visible { background: rgba(255,255,255,.09); color: var(--text, #e6e9ef); outline: 2px solid var(--accent, #6ea8fe); outline-offset: 2px; }
+.composer-icon-button:disabled { opacity: .35; cursor: not-allowed; }
+.composer-send-button { width: 32px; height: 32px; border: 0; border-radius: 50%; background: var(--accent, #6ea8fe); color: #08111f; font-size: 20px; line-height: 1; cursor: pointer; }
+.composer-send-button:disabled { opacity: .35; cursor: not-allowed; }
+.composer-mic.listening { color: #ff6b6b; background: rgba(255,107,107,.12); }
+.composer-task-controls { display: inline-flex; gap: 2px; }
+.composer-task-controls[hidden], .composer-icon-button[hidden] { display: none; }
+.composer-inline-status { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--muted, #9aa4b2); }
+.composer-footer-row { display: flex; justify-content: center; padding: 5px 0; }
+.composer-hint { font-size: 10px; color: var(--muted, #9aa4b2); }
+.message-actions { display: flex; gap: 4px; margin-top: 6px; }
+.message-action { width: 28px; height: 28px; padding: 0; border: 1px solid transparent; border-radius: 50%; background: transparent; color: var(--muted, #9aa4b2); font-size: 0; cursor: pointer; }
+.message-action::before { content: '⧉'; font-size: 15px; }
+.message-action:nth-child(2)::before { content: '↗'; }
+.message-action:hover { border-color: var(--border, #2a3140); color: var(--text, #e6e9ef); }
+@media (max-width: 640px) { .composer-box { border-radius: 18px; } .composer-hint { display: none; } .composer-inline-status { max-width: 120px; } }
+
+.message-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.message-action {
+  border: 1px solid var(--border, #2a3140);
+  background: transparent;
+  color: var(--muted, #9aa4b2);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.message-action:hover {
+  border-color: var(--accent, #6ea8fe);
+  color: var(--text, #e6e9ef);
+}
+
+
+/* =========================================================
+   COMPACT LAYOUT PASS
+   Preserve the existing page/panel structure and mobile drawers.
+   ========================================================= */
+
+.global-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-height: 26px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #fafbfc;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.global-status .status-dot {
+  width: 6px;
+  height: 6px;
+  box-shadow: none;
+}
+
+.global-status[data-state="healthy"] { color: var(--success); }
+.global-status[data-state="warning"] { color: var(--warning); }
+.global-status[data-state="degraded"] { color: #c45a00; }
+.global-status[data-state="error"] { color: var(--danger); }
+
+.home-dashboard {
+  padding-top: 0;
+}
+
+.home-tom-note {
+  gap: 9px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+
+.tom-orb.large {
+  width: 28px;
+  height: 28px;
+}
+
+.home-tom-note p {
+  font-size: 11px;
+}
+
+.home-tom-note button,
+.secondary-button {
+  padding: 6px 9px;
+}
+
+.summary-grid {
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.summary-card {
+  padding: 8px 10px;
+  min-height: 58px;
+}
+
+.summary-card strong {
+  margin: 2px 0 1px;
+  font-size: 16px;
+  line-height: 1.15;
+}
+
+.home-primary-grid,
+.home-lower-grid {
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.home-panel {
+  padding: 10px 11px;
+}
+
+.home-panel-header {
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.home-panel-header h2 {
+  margin-top: 2px;
+  font-size: 12.5px;
+}
+
+.home-health-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.health-row {
+  min-height: 32px;
+  padding: 5px 7px;
+  gap: 5px;
+  font-size: 10px;
+}
+
+.health-row strong {
+  font-size: 8.5px;
+}
+
+.mock-disclosure {
+  margin-top: 6px;
+  font-size: 8.5px;
+}
+
+.home-action-grid {
+  gap: 5px;
+}
+
+.home-action-grid button {
+  min-height: 44px;
+  padding: 6px 7px;
+  grid-template-columns: 18px 1fr;
+}
+
+.home-action-grid button > span {
+  font-size: 12px;
+}
+
+.home-action-grid small {
+  font-size: 8px;
+}
+
+.connected-apps-panel {
+  margin-bottom: 8px;
+}
+
+.home-app-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.home-app-grid article {
+  gap: 7px;
+  padding: 6px 8px;
+}
+
+.app-monogram {
+  width: 23px;
+  height: 23px;
+  border-radius: 5px;
+  font-size: 7px;
+}
+
+.home-app-grid small {
+  margin-top: 1px;
+  font-size: 8px;
+}
+
+.dashboard-empty {
+  min-height: 64px;
+  gap: 2px;
+  padding: 10px;
+}
+
+.dashboard-empty span {
+  font-size: 9px;
+}
+
+.page {
+  padding-top: 10px;
+}
+
+.card {
+  padding: 8px 11px;
+  margin-bottom: 6px;
+}
+
+.card-header {
+  margin-bottom: 5px;
+  padding-bottom: 6px;
+}
+
+.workspace-layout {
+  grid-template-columns: minmax(210px, 270px) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.workspace-explorer {
+  margin-top: 8px;
+  padding: 4px;
+  border-radius: 6px;
+}
+
+.workspace-node {
+  padding: 5px 6px;
+  font-size: 11px;
+}
+
+.tom-panel,
+.tom-work-surface {
+  background: #fbfbfb;
+}
+
+.tom-header,
+.center-chat-header {
+  min-height: 44px;
+  padding: 7px 11px;
+}
+
+.tom-panel .tom-title,
+.tom-work-surface .tom-title {
+  font-size: 12.5px;
+}
+
+.tom-context {
+  margin-top: 1px;
+  font-size: 9px;
+}
+
+.tom-history {
+  max-height: 24%;
+}
+
+.tom-history-header {
+  padding: 7px 11px;
+}
+
+.tom-history-header strong {
+  font-size: 10.5px;
+}
+
+.tom-history-header span {
+  font-size: 8.5px;
+}
+
+.tom-history-list {
+  max-height: 124px;
+}
+
+.tom-history-item {
+  padding: 6px 10px;
+  font-size: 10.5px;
+}
+
+.tom-quick-actions {
+  padding: 5px 9px;
+}
+
+.quick-actions-toggle {
+  padding: 4px 7px;
+  font-size: 10px;
+}
+
+.quick-actions-menu {
+  max-height: min(260px, 42vh);
+  padding: 4px;
+  border-radius: 7px;
+}
+
+.quick-actions-group-title {
+  padding: 4px 6px 2px;
+  font-size: 8px;
+}
+
+.quick-actions-menu button {
+  padding: 4px 6px;
+  font-size: 10.5px;
+}
+
+.tom-work-surface .tom-messages {
+  padding: 12px clamp(12px, 3vw, 34px);
+  gap: 8px;
+}
+
+.tom-work-surface .tom-message {
+  max-width: min(88%, 760px);
+  padding: 7px 10px;
+  font-size: 12px;
+  line-height: 1.42;
+}
+
+.tom-message .message-time {
+  margin-top: 2px;
+  font-size: 9px;
+}
+
+.tom-composer-status {
+  padding: 4px 11px;
+  min-height: 24px;
+  font-size: 10px;
+}
+
+.tom-composer {
+  padding-bottom: 0;
+}
+
+.composer-box {
+  padding: 7px 9px 5px;
+  border-radius: 16px;
+}
+
+.tom-composer textarea,
+.tom-work-surface .tom-composer textarea {
+  min-height: 38px;
+  height: 38px;
+  max-height: 132px;
+  padding: 3px 5px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.composer-bottom-row {
+  min-height: 28px;
+}
+
+.composer-icon-button {
+  width: 28px;
+  height: 28px;
+}
+
+.composer-send-button {
+  width: 30px;
+  height: 30px;
+}
+
+.composer-footer-row {
+  padding: 3px 0;
+}
+
+.composer-hint {
+  font-size: 9px;
+}
+
+.tom-context-chips {
+  gap: 4px;
+  padding: 5px 10px 0;
+}
+
+.context-chip {
+  gap: 4px;
+  padding: 2px 4px 2px 7px;
+  font-size: 10px;
+}
+
+.context-chip-remove {
+  padding: 0 5px;
+}
+
+.code-block {
+  margin: 5px 0;
+}
+
+.code-block pre {
+  padding: 9px 10px;
+}
+
+.code-block code {
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+@media (max-width: 760px) {
+  .global-status span:last-child {
+    display: none;
+  }
+
+  .global-status {
+    min-width: 26px;
+    justify-content: center;
+    padding: 4px 7px;
+  }
+
+  .home-primary-grid,
+  .home-lower-grid,
+  .home-health-grid,
+  .home-app-grid {
+    grid-template-columns: 1fr;
+  }
+}

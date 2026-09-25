@@ -28,7 +28,7 @@ if (fs.existsSync('slow')) setInterval(() => {}, 1000);
 else http.createServer((req,res) => { res.statusCode = fs.existsSync('unhealthy') ? 503 : 200; res.end('ready'); })
  .listen(port, '127.0.0.1', () => { console.log('ready runtime'); console.error('runtime diagnostic'); });
 `);
-  const gateway = createRuntimeGateway({ root, services: { web: { cwd: 'web', port, healthPath: '/' } }, timeoutMs: 2500, startupMs: 2500, graceMs: 100, maxBytes: 4096, ...options });
+  const gateway = createRuntimeGateway({ root, services: { web: { cwd: 'web', host: 'localhost', port, healthPath: '/' } }, timeoutMs: 2500, startupMs: 2500, graceMs: 100, maxBytes: 4096, ...options });
   return { root, port, gateway, packagePath, scripts,
     write(name, value) { fs.writeFileSync(path.join(root, 'web', name), value); },
     async cleanup() { await gateway.shutdown(); fs.rmSync(root, { recursive: true, force: true }); }

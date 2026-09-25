@@ -53,6 +53,48 @@ test('discovery and negated requests never select execution; positive requests d
   for (const message of ['run the tests', 'execute the test suite', 'run npm test', 'run npm run build', 'run lint']) assert.equal(classify(message)?.tool, 'terminal.run', message);
   assert.equal(classify('npm test'), null);
 });
+test('live regression: discovery/negation wording never executes or requests npm test approval', async t => {
+  const { classify } = require('../tools/runtime-intent');
+  const { planVerification } = require('../tools/chat-tool-planner');
+
+  // Exact live acceptance wording: discovery request with an explicit
+  // "do not guess npm test" guard.
+  const discovery = 'First discover the existing test commands. Do not guess npm test.';
+  assert.deepEqual(classify(discovery), { tool: 'terminal.discover', args: { cwd: 'web' } });
+  assert.equal(planVerification(discovery), null);
+
+  // Negation-only and inspection-only variants: discover, never execute.
+  for (const message of ['Do not run npm test.', 'What tests exist?']) {
+    assert.deepEqual(classify(message), { tool: 'terminal.discover', args: { cwd: 'web' } }, message);
+    assert.equal(planVerification(message), null, message);
+  }
+
+  // "Run npm test." is a genuine execution request, but Drop's package.json
+  // defines no test script, so verification planning must refuse it before
+  // any approval is proposed.
+  const { classify: liveClassify } = require('../tools/runtime-intent');
+  assert.deepEqual(liveClassify('Run npm test.'), { tool: 'terminal.run', args: { command: 'npm test', cwd: 'web' } });
+  assert.equal(planVerification('Run npm test.'), null);
+
+  // End-to-end on the live request path: classify -> planVerification ->
+  // gateway. Only terminal.discover may be invoked for the discovery and
+  // negation messages; terminal.run must never be invoked for them.
+  const calls = [];
+  async function fakeExecute(tool, args) {
+    calls.push({ tool, args });
+    if (tool === 'terminal.discover') return { success: true, tool, data: { scripts: {} } };
+    throw new Error('must not execute ' + tool);
+  }
+  for (const message of [discovery, 'Do not run npm test.', 'What tests exist?']) {
+    calls.length = 0;
+    const request = classify(message);
+    assert.equal(request.tool, 'terminal.discover', message);
+    const verification = planVerification(message);
+    assert.equal(verification, null, message);
+    await fakeExecute(request.tool, request.args);
+    assert.deepEqual(calls.map((call) => call.tool), ['terminal.discover'], message);
+  }
+});
 test('approval is required, reject/replay/changed action arguments fail closed', async t => {
   const f = await using(t);
   const request = { command: 'npm test', cwd: 'web' };
@@ -73,6 +115,85 @@ test('approval expires without executing', async t => {
   const result = await f.gateway.executeTool('terminal.run', { command: 'npm test' });
   await new Promise(resolve => setTimeout(resolve, 20));
   assert.match((await f.gateway.executeTool('execution.approve', { approvalId: result.data.approvalId })).error, /expired/);
+});
+test('live routing: execution approve/reject wording reaches the execution path, never the edit path', async t => {
+  const runtimeIntent = require('../tools/runtime-intent');
+  const { planEditApproval } = require('../tools/chat-tool-planner');
+  const editApprovalStore = require('../tools/edit-approval-store');
+
+  // The exact live rejection must classify as execution.reject. The edit
+  // parser (which predates execution approvals and only knows approve/apply
+  // verbs) must not produce an edit approval for bare "reject execution".
+  const liveReject = 'reject execution f72520c3-d178-4ff9-89f1-4e3082bb1006';
+  assert.deepEqual(runtimeIntent.classify(liveReject),
+    { tool: 'execution.reject', args: { approvalId: 'f72520c3-d178-4ff9-89f1-4e3082bb1006' } });
+  assert.equal(planEditApproval(liveReject, 'f72520c3-d178-4ff9-89f1-4e3082bb1006'), null);
+
+  // Mirror-image approve wording: the execution path owns it. (The legacy
+  // edit parser can also match "approve <uuid>" text; the server guard
+  // below guarantees the edit branch never runs for execution wording.)
+  const liveApprove = 'approve execution f72520c3-d178-4ff9-89f1-4e3082bb1006';
+  assert.deepEqual(runtimeIntent.classify(liveApprove),
+    { tool: 'execution.approve', args: { approvalId: 'f72520c3-d178-4ff9-89f1-4e3082bb1006' } });
+
+  // Server routing guard: execution wording must never enter the edit
+  // approval branch, even though planEditApproval matches "approve <uuid>".
+  const EXECUTION_WORDING = /\b(approve|reject)\s+execution\b/i;
+  assert.equal(EXECUTION_WORDING.test(liveReject), true);
+  assert.equal(EXECUTION_WORDING.test(liveApprove), true);
+  assert.equal(EXECUTION_WORDING.test('approve edit f72520c3-d178-4ff9-89f1-4e3082bb1006'), false);
+
+  // Full gateway round-trip through the same classify->executeTool path the
+  // /chat handler uses (server.js lines 179-190). Runs against the fixture
+  // Drop project, whose package.json defines test/build/lint/dev.
+  const f = await using(t);
+  async function routeChat(message) {
+    const request = runtimeIntent.classify(message);
+    assert.ok(request, 'expected a routed request for ' + message);
+    const evidence = await f.gateway.executeTool(request.tool, request.args);
+    return { request, evidence, reply: runtimeIntent.render(evidence) };
+  }
+
+  // 1. Reject a valid execution approval: rejected, never executed, and the
+  // reply must not contain the edit-path marker "Edit not applied".
+  const pendingReject = await f.gateway.executeTool('terminal.run', { command: 'npm test', cwd: 'web' });
+  assert.equal(pendingReject.data.status, 'pending_approval');
+  const rejected = await routeChat(`reject execution ${pendingReject.data.approvalId}`);
+  assert.equal(rejected.evidence.success, true);
+  assert.equal(rejected.evidence.data.status, 'rejected');
+  assert.ok(!rejected.reply.includes('Edit not applied'), 'rejection must not enter the edit path');
+  assert.match(rejected.reply, /rejected/i);
+  assert.deepEqual((await f.gateway.executeTool('terminal.status')).data, []);
+
+  // 2. Approve a valid execution approval: executes exactly once.
+  const pendingApprove = await f.gateway.executeTool('terminal.run', { command: 'npm test', cwd: 'web' });
+  const approvedOnce = await routeChat(`approve execution ${pendingApprove.data.approvalId}`);
+  assert.equal(approvedOnce.evidence.success, true);
+  assert.equal(approvedOnce.evidence.data.exitCode, 0);
+
+  // 3. Replay the rejected approval: fail closed.
+  const replayRejected = await f.gateway.executeTool('execution.approve', { approvalId: pendingReject.data.approvalId });
+  assert.equal(replayRejected.success, false);
+
+  // 4. Replay the approved approval: fail closed (single-use).
+  const replayApproved = await f.gateway.executeTool('execution.approve', { approvalId: pendingApprove.data.approvalId });
+  assert.equal(replayApproved.success, false);
+
+  // 5. Edit approval/rejection behavior unchanged: unknown edit approval
+  // still resolves through the edit store path, not the execution gateway.
+  assert.equal(editApprovalStore.getApproval('f72520c3-d178-4ff9-89f1-4e3082bb1006'), null);
+  assert.deepEqual(planEditApproval(
+    'approve edit f72520c3-d178-4ff9-89f1-4e3082bb1006',
+    'f72520c3-d178-4ff9-89f1-4e3082bb1006'),
+    { approvalId: 'f72520c3-d178-4ff9-89f1-4e3082bb1006' });
+
+  // 6. Invalid execution approval ID through the execution path: an
+  // execution-specific failure, never the edit-path reply.
+  const bogus = await routeChat('reject execution 00000000-0000-4000-8000-000000000000');
+  assert.equal(bogus.evidence.success, false);
+  assert.match(bogus.evidence.error, /Unknown or consumed approval/);
+  assert.match(bogus.reply, /Execution request not performed/);
+  assert.ok(!bogus.reply.includes('Edit not applied'), 'invalid execution ID must not enter the edit path');
 });
 test('real nonzero exit and spawn failure retain distinct evidence', async t => {
   const f = await using(t); f.write('task.cjs', 'process.exit(7)');

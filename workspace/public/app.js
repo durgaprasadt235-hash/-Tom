@@ -112,10 +112,23 @@ setInterval(updateClock, 30000);
 const healthButton = document.getElementById("healthCheckButton");
 const healthSummary = document.getElementById("healthSummary");
 const connections = document.querySelectorAll(".health-row");
+const globalStatus = document.getElementById("globalStatus");
+const globalStatusDot = document.getElementById("globalStatusDot");
+const globalStatusLabel = document.getElementById("globalStatusLabel");
+
+function setGlobalStatus(state, label) {
+  if (!globalStatus || !globalStatusDot || !globalStatusLabel) return;
+
+  globalStatus.dataset.state = state;
+  globalStatusDot.className = `status-dot ${state}`;
+  globalStatusLabel.textContent = label;
+  globalStatus.title = `Workspace status: ${label}`;
+}
 
 async function runWorkspaceHealthCheck() {
   healthButton.disabled = true;
   healthButton.textContent = "Checking...";
+  setGlobalStatus("warning", "Checking");
 
   healthSummary.textContent = "Checking workspace connections...";
 
@@ -136,6 +149,7 @@ async function runWorkspaceHealthCheck() {
       : "Workspace degraded";
 
     healthSummary.textContent = summaryText;
+    setGlobalStatus(health.status === "ok" ? "healthy" : "degraded", summaryText);
 
     const rows = Array.from(document.querySelectorAll(".health-row"));
     const rowMap = new Map(rows.map((row) => [row.dataset.connection, row]));
@@ -150,7 +164,7 @@ async function runWorkspaceHealthCheck() {
     };
 
     updateRow("Development Environment", health.project?.connected, health.project?.connected ? "Project connected" : "Not connected");
-  updateRow("NVIDIA Direct", health.providers?.nvidiaDirect?.configured, health.providers?.nvidiaDirect?.configured ? "NVIDIA Direct configured" : "Missing NVIDIA configuration");
+    updateRow("NVIDIA Direct", health.providers?.nvidiaDirect?.configured, health.providers?.nvidiaDirect?.configured ? "NVIDIA Direct configured" : "Missing NVIDIA configuration");
     updateRow("File Server", health.providers?.vscode?.connected, health.providers?.vscode?.connected ? "VS Code bridge connected" : "VS Code disconnected");
 
     ["Source Database", "Message Queue", "Scheduler"].forEach((label) => {
@@ -161,7 +175,9 @@ async function runWorkspaceHealthCheck() {
     });
 
   } catch (error) {
-    healthSummary.textContent = "Workspace health unavailable";
+    const message = "Workspace health unavailable";
+    healthSummary.textContent = message;
+    setGlobalStatus("error", "Offline");
     connections.forEach((connection) => {
       const status = connection.querySelector(".connection-status");
       status.textContent = "Unavailable";
@@ -404,6 +420,240 @@ const messagesContainer = document.getElementById("tomMessages");
 const inputField = document.getElementById("tomInput");
 const sendButton = document.getElementById("tomSendButton");
 const responseDisplay = document.getElementById("tomResponse");
+
+// ---------------------------------------
+// CHAT CONTROL PANEL (server-derived)
+// ---------------------------------------
+// Button availability comes ONLY from task.controls in the latest server
+// response (TomControls.deriveButtons) — never from local busy booleans.
+const taskStatusEl = document.getElementById("tomTaskStatus");
+const taskControlsEl = document.getElementById("tomTaskControls");
+const pauseButton = document.getElementById("tomPauseButton");
+const resumeButton = document.getElementById("tomResumeButton");
+const stopButton = document.getElementById("tomStopButton");
+const attachButton = document.getElementById("tomAttachButton");
+const attachInput = document.getElementById("tomAttachInput");
+const attachmentList = document.getElementById("tomAttachmentList");
+const voiceButton = document.getElementById("tomVoiceButton");
+const voiceNotice = document.getElementById("tomVoiceNotice");
+const openAppLink = document.getElementById("tomOpenApp");
+
+let currentTaskId = null;
+let currentTaskView = null;
+let stagedAttachments = [];
+let voiceController = null;
+
+function applyTaskView(task) {
+  if (task && typeof task === "object" && task.taskId) {
+    currentTaskView = task;
+    currentTaskId = task.taskId;
+  }
+  const buttons = window.TomControls.deriveButtons(currentTaskView);
+    if (taskStatusEl) taskStatusEl.textContent = window.TomControls.formatTaskStatus(currentTaskView);
+    if (taskControlsEl) taskControlsEl.hidden = !buttons.showTaskControls;
+    if (inputField) {
+      inputField.disabled = false;
+      inputField.readOnly = false;
+      inputField.placeholder = currentTaskView && ['PLANNING', 'RUNNING', 'PAUSING', 'CANCELLING'].includes(currentTaskView.state)
+        ? "Tom is working…" : "Ask Tom about your project...";
+    }
+  if (pauseButton) { pauseButton.hidden = !buttons.pause; pauseButton.disabled = !buttons.pause; }
+  if (resumeButton) { resumeButton.hidden = !buttons.resume; resumeButton.disabled = !buttons.resume; }
+  if (stopButton) { stopButton.hidden = !buttons.stop; stopButton.disabled = !buttons.stop; }
+  if (attachButton) { attachButton.disabled = !buttons.attach; attachButton.hidden = !buttons.attach; }
+  if (voiceButton) { voiceButton.disabled = !buttons.voice; voiceButton.hidden = !buttons.voice; }
+  if (sendButton) { sendButton.hidden = !buttons.send; sendButton.disabled = !buttons.send || !inputField.value.trim(); }
+  if (inputField) { inputField.disabled = false; inputField.readOnly = false; inputField.placeholder = buttons.pause || buttons.stop ? "Tom is working…" : "Ask Tom about your project..."; }
+  // Open App is a user-click anchor only. The server supplies the URL; this
+  // second allowlist check prevents model, input, or prototype pollution from
+  // turning it into a script/file/external destination.
+  refreshOpenApp();
+}
+
+function refreshOpenApp() {
+  if (!openAppLink) return;
+  fetch("/runtime/open-app", { headers: { Accept: "application/json" } })
+    .then((response) => response.json())
+    .then((target) => {
+      const expectedPort = 5173; // default configured port; server endpoint is authoritative
+      const safe = target && target.available === true && target.serviceId === 'web' && typeof target.url === 'string' &&
+        target.url === 'http://localhost:' + expectedPort && target.executionId && target.owned === true && target.healthy === true;
+      openAppLink.hidden = !safe;
+      if (safe) {
+        openAppLink.href = target.url;
+        openAppLink.dataset.serviceId = String(target.serviceId);
+        openAppLink.title = "Open " + String(target.serviceId) + " (verified managed runtime)";
+      } else {
+        openAppLink.removeAttribute("href");
+        delete openAppLink.dataset.serviceId;
+      }
+    })
+    .catch(() => { openAppLink.hidden = true; openAppLink.removeAttribute("href"); });
+}
+
+function resetTaskPanel() {
+  currentTaskId = null;
+  currentTaskView = null;
+  stagedAttachments = [];
+  renderStagedAttachments();
+  if (taskStatusEl) taskStatusEl.textContent = "No active task";
+  if (taskControlsEl) taskControlsEl.hidden = true;
+  [pauseButton, resumeButton, stopButton].forEach((button) => {
+    if (button) { button.hidden = true; button.disabled = true; }
+  });
+  if (attachButton) { attachButton.disabled = true; attachButton.hidden = false; }
+  if (voiceButton) { voiceButton.disabled = false; voiceButton.hidden = false; }
+  if (sendButton) { sendButton.hidden = false; sendButton.disabled = true; }
+  if (inputField) inputField.disabled = false;
+}
+
+// Lazily creates a server task session (first attach or first send).
+async function ensureTask() {
+  if (currentTaskId) return currentTaskId;
+  const response = await fetch("/task", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+  const data = await response.json();
+  if (!response.ok || !data.task) throw new Error(data.error || "Could not create task");
+  applyTaskView(data.task);
+  return currentTaskId;
+}
+
+function renderStagedAttachments() {
+  if (!attachmentList) return;
+  attachmentList.innerHTML = "";
+  attachmentList.hidden = stagedAttachments.length === 0;
+  stagedAttachments.forEach((attachment, index) => {
+    const chip = document.createElement("span");
+    chip.className = "attachment-chip";
+    const label = document.createElement("span");
+    label.textContent = attachment.name + " (" + Math.max(1, Math.round(attachment.size / 1024)) + " KB)";
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "attachment-remove";
+    remove.setAttribute("aria-label", "Remove " + attachment.name);
+    remove.textContent = "×";
+    remove.addEventListener("click", () => {
+      stagedAttachments.splice(index, 1);
+      renderStagedAttachments();
+    });
+    chip.append(label, remove);
+    attachmentList.appendChild(chip);
+  });
+}
+
+// Client validation mirrors the server rules for instant feedback; the
+// server (tools/attachment-store.js) re-validates type and size itself.
+async function stageFile(file) {
+  const check = window.TomControls.validateAttachment(file, stagedAttachments.length);
+  if (!check.ok) throw new Error(check.error);
+  const taskId = await ensureTask();
+  const dataBase64 = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
+    reader.onerror = () => reject(new Error("Could not read file"));
+    reader.readAsDataURL(file);
+  });
+  const response = await fetch("/attachment", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      taskId,
+      name: file.name,
+      type: file.type || "text/plain",
+      encoding: "base64",
+      data: dataBase64
+    })
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "Attachment rejected");
+  stagedAttachments.push({ id: data.attachment.id, name: data.attachment.name, size: data.attachment.size });
+  renderStagedAttachments();
+}
+
+if (attachButton && attachInput) {
+  attachButton.addEventListener("click", () => {
+    if (!attachButton.disabled) attachInput.click();
+  });
+  attachInput.addEventListener("change", async () => {
+    const files = Array.from(attachInput.files || []);
+    attachInput.value = "";
+    for (const file of files) {
+      try {
+        await stageFile(file);
+      } catch (error) {
+        responseDisplay.textContent = "Attachment rejected: " + error.message;
+      }
+    }
+  });
+}
+
+// Voice input: Web Speech API with graceful degradation. The transcript is
+// appended to the composer as EDITABLE text; sending stays a manual action.
+voiceController = window.TomControls.createVoiceController({
+  onTranscript: (text) => {
+    const trimmed = inputField.value.replace(/\s+$/, "");
+    inputField.value = trimmed ? trimmed + " " + text : text;
+    sendButton.disabled = !inputField.value.trim();
+    inputField.focus();
+    inputField.setSelectionRange(inputField.value.length, inputField.value.length);
+  },
+  onInterim: () => { /* interim preview stays in the status line only */ },
+  onState: (state) => {
+    if (voiceNotice) {
+      voiceNotice.hidden = !state.notice;
+      voiceNotice.textContent = state.notice || "";
+    }
+  if (voiceButton) {
+      voiceButton.setAttribute("aria-pressed", String(Boolean(state.listening)));
+      voiceButton.classList.toggle("listening", Boolean(state.listening));
+      voiceButton.setAttribute("aria-label", state.listening ? "Stop voice input" : "Start voice input");
+      if (!state.supported) voiceButton.title = window.TomControls.VOICE_UNSUPPORTED;
+    }
+  }
+});
+
+if (voiceButton) {
+  voiceButton.addEventListener("click", () => {
+    if (voiceController.listening) voiceController.stop();
+    else voiceController.start();
+  });
+}
+
+// Pause / Resume / Stop — every call returns the authoritative task view,
+// and the buttons are re-derived from it (never from local state).
+async function postTaskControl(action, body) {
+  if (!currentTaskId) return null;
+  try {
+    const response = await fetch(`/task/${encodeURIComponent(currentTaskId)}/${action}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {})
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || action + " failed");
+    applyTaskView(data.task);
+    const labels = { pause: "Task paused.", resume: "Task resumed.", stop: "Task stopped." };
+    responseDisplay.textContent = labels[action] || "";
+    return data;
+  } catch (error) {
+    responseDisplay.textContent = "Task control failed: " + error.message;
+    return null;
+  }
+}
+
+if (pauseButton) pauseButton.addEventListener("click", () => postTaskControl("pause"));
+if (stopButton) stopButton.addEventListener("click", () => postTaskControl("stop"));
+if (resumeButton) {
+  resumeButton.addEventListener("click", () => {
+    // Edited composer text on Resume = edit-after-pause: the server bumps
+    // the authority revision, invalidating approvals from the old text.
+    const edited = inputField.value.trim();
+    return postTaskControl("resume", edited ? { instruction: edited } : {});
+  });
+}
 const composerForm = document.getElementById("tomComposer");
 
 // One layout state for the existing navigation and Tom panels.
@@ -545,6 +795,7 @@ function startNewConversation() {
   // The current active conversation stays saved (it's already in conversations[])
   // Just clear the active id so next message creates a new one
   activeConversationId = null;
+  resetTaskPanel();
   renderMessages([]);
   renderHistory();
   updateInputState(true);
@@ -685,6 +936,54 @@ function renderMessages(messages) {
     // Render any code Copy buttons created by renderMarkdown.
     wireCodeCopy(msgDiv);
 
+    // Copy / Share on every sent message. Share payloads pass through
+    // TomControls.buildShareText, which redacts secrets before anything
+    // leaves the machine (navigator.share when available, clipboard after).
+    if (role === "user" || role === "tom") {
+      const actions = document.createElement("div");
+      actions.className = "message-actions";
+
+      const copyBtn = document.createElement("button");
+      copyBtn.type = "button";
+      copyBtn.className = "message-action message-icon-action";
+      copyBtn.textContent = "⧉";
+      copyBtn.title = "Copy response";
+      copyBtn.setAttribute("aria-label", "Copy response");
+      copyBtn.addEventListener("click", async () => {
+        try {
+          await window.TomControls.copyText(msg.content);
+          copyBtn.textContent = "Copied";
+        } catch (_) {
+          copyBtn.textContent = "Copy failed";
+        }
+        setTimeout(() => { copyBtn.textContent = "Copy"; }, 1400);
+      });
+
+      const shareBtn = document.createElement("button");
+      shareBtn.type = "button";
+      shareBtn.className = "message-action message-icon-action";
+      shareBtn.textContent = "↗";
+      shareBtn.title = "Share response";
+      shareBtn.setAttribute("aria-label", "Share response");
+      shareBtn.addEventListener("click", async () => {
+        const shareText = window.TomControls.buildShareText({
+          role,
+          content: msg.content,
+          taskState: currentTaskView ? currentTaskView.state : null
+        });
+        try {
+          const outcome = await window.TomControls.shareOrCopy(shareText);
+          shareBtn.textContent = outcome === "shared" ? "Shared" : "Copied";
+        } catch (_) {
+          shareBtn.textContent = "Share failed";
+        }
+        setTimeout(() => { shareBtn.textContent = "Share"; }, 1400);
+      });
+
+      actions.append(copyBtn, shareBtn);
+      msgDiv.appendChild(actions);
+    }
+
     // Add small timestamp for Tom messages.
     if (role === "tom" && msg.timestamp) {
       const timeSpan = document.createElement("span");
@@ -707,15 +1006,17 @@ function renderMessages(messages) {
 
 // Update input state (enable/disable send)
 function updateInputState(enable = true) {
-  if (enable) {
-    sendButton.disabled = false;
+  const buttons = window.TomControls.deriveButtons(currentTaskView);
+  if (enable && buttons.send) {
+    sendButton.disabled = !inputField.value.trim();
     inputField.disabled = false;
     if (!mobileLayout.matches && document.body.classList.contains("command-page")) inputField.focus();
     responseDisplay.textContent = "Tom is ready.";
   } else {
+    sendButton.hidden = !buttons.send;
     sendButton.disabled = true;
-    inputField.disabled = true;
-    responseDisplay.textContent = "Tom is thinking...";
+    inputField.disabled = false;
+    responseDisplay.textContent = buttons.busy ? "Tom is working..." : "Tom is ready.";
   }
 }
 
@@ -760,6 +1061,8 @@ async function sendMessage() {
     }));
 
   try {
+    // Staged attachments ride with THIS message, then the tray clears.
+    const attachmentIds = stagedAttachments.map((item) => item.id);
     const response = await fetch("/chat", {
       method: "POST",
       headers: {
@@ -767,11 +1070,20 @@ async function sendMessage() {
       },
       body: JSON.stringify({
         message: message,
-        history: historyForServer
+        history: historyForServer,
+        ...(currentTaskId ? { taskId: currentTaskId } : {}),
+        ...(attachmentIds.length ? { attachmentIds } : {})
       })
     });
 
     const data = await response.json();
+
+    // Authoritative task view arrives with EVERY response (success or error).
+    if (data.task) applyTaskView(data.task);
+    if (response.ok && attachmentIds.length) {
+      stagedAttachments = [];
+      renderStagedAttachments();
+    }
 
     if (!response.ok) {
       throw new Error(data.error || "Tom request failed");

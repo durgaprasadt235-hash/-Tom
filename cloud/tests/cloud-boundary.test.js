@@ -125,6 +125,53 @@ test('cloud landing page calls only the safe cloud surface', () => {
   }
 });
 
+test('boundary verifier bans every Phase 1 privileged capability', () => {
+  // Pins the ban list so no future boundary change can silently drop a
+  // privileged local capability: terminal/process control, the edit-approval
+  // stack, VS Code integration, the model router, and local-only endpoints.
+  const verifier = fs.readFileSync(path.join(CLOUD_ROOT, 'scripts/verify-boundary.js'), 'utf8');
+  for (const capability of [
+    'terminal.run',
+    'terminal.cancel',
+    'terminal.discover',
+    'runtime.start',
+    'runtime.stop',
+    'runtime.restart',
+    'execution.approve',
+    'execution.reject',
+    'child_process',
+    'process.kill',
+    'DROP_ROOT',
+    'readProjectFile',
+    'listProjectFiles',
+    'vscode',
+    'action-gateway',
+    'runtime-controller',
+    'process-supervisor',
+    'command-policy',
+    'runtime-intent',
+    'terminal-runner',
+    'edit-approval-store',
+    'patch-validator',
+    'task-evidence-store',
+    'nvidia-router',
+    'agent-runtime',
+    'code-inspection-runtime',
+    'vscode.file.apply_edit',
+    'vscode.file.propose_edit',
+    'git.status',
+    'dotenv',
+    '/tools/execute',
+    'express',
+    '127.0.0.1',
+    'workspace/',
+    'nvapi-',
+    'DATABASE_URL_UNPOOLED'
+  ]) {
+    assert.ok(verifier.includes(capability), `boundary verifier must keep banning ${capability}`);
+  }
+});
+
 test('vercel.json pins an explicit cloud-only configuration', () => {
   const config = JSON.parse(fs.readFileSync(path.join(CLOUD_ROOT, 'vercel.json'), 'utf8'));
   assert.equal(config.buildCommand, 'npm run build');
